@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import {
   createAdminUser,
   createTransactionStatus,
@@ -125,7 +125,11 @@ export function AdminPage() {
   }, [])
 
   useEffect(() => {
-    void loadAdminData()
+    const timer = window.setTimeout(() => {
+      void loadAdminData()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [loadAdminData])
 
   const handleLogout = () => {

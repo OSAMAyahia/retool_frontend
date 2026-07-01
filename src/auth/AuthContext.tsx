@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   getCurrentUser,
@@ -7,15 +7,7 @@ import {
   setStoredAuthToken,
   type AdminUser,
 } from '../services/api'
-
-interface AuthContextValue {
-  user: AdminUser | null
-  isLoading: boolean
-  login: (username: string, password: string) => Promise<AdminUser>
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
+import { AuthContext } from './authState'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null)
@@ -76,14 +68,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider')
-  }
-
-  return context
 }

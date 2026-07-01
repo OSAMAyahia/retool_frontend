@@ -2,7 +2,7 @@ import { LockKeyhole, LogIn } from 'lucide-react'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) {

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
