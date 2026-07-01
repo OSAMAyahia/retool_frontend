@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock3, Send, WalletCards } from 'lucide-react'
+import { AlertTriangle, Clock3, Inbox, Send, WalletCards } from 'lucide-react'
 import type { TransactionSummary } from '../types/transaction'
 
 const cards = [
@@ -10,6 +10,15 @@ const cards = [
     frame: 'border-[#e5d9ff] shadow-[0_12px_30px_rgba(104,71,245,0.09)]',
     iconClass: 'bg-[#eee6ff] text-[#6847f5]',
     accent: 'text-[#6847f5]',
+  },
+  {
+    key: 'new',
+    label: 'New',
+    caption: 'of total',
+    icon: Inbox,
+    frame: 'border-[#bae6fd] shadow-[0_12px_30px_rgba(14,165,233,0.08)]',
+    iconClass: 'bg-[#e0f2fe] text-[#0284c7]',
+    accent: 'text-[#0284c7]',
   },
   {
     key: 'pending',
@@ -30,8 +39,8 @@ const cards = [
     accent: 'text-[#08b86f]',
   },
   {
-    key: 'failed',
-    label: 'Failed',
+    key: 'rejected',
+    label: 'rejected',
     caption: 'of total',
     icon: AlertTriangle,
     frame: 'border-[#ffd1d9] shadow-[0_12px_30px_rgba(255,38,68,0.08)]',
@@ -50,7 +59,7 @@ function percent(value: number, total: number) {
 
 export function SummaryCards({ summary }: { summary: TransactionSummary }) {
   return (
-    <section className="grid gap-7 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
       {cards.map((card) => {
         const Icon = card.icon
         const value = summary[card.key]
@@ -60,20 +69,20 @@ export function SummaryCards({ summary }: { summary: TransactionSummary }) {
         return (
           <article
             key={card.key}
-            className={`min-h-[194px] rounded-2xl border bg-gradient-to-br from-white to-white/75 p-7 ${card.frame}`}
+            className={`min-h-[184px] rounded-2xl border bg-gradient-to-br from-white to-white/75 p-5 ${card.frame}`}
           >
-            <div className="flex items-center gap-6">
-              <span className={`grid h-[76px] w-[76px] place-items-center rounded-2xl ${card.iconClass}`}>
-                <Icon className="h-9 w-9" aria-hidden="true" />
+            <div className="flex items-center gap-4">
+              <span className={`grid h-14 w-14 place-items-center rounded-2xl ${card.iconClass}`}>
+                <Icon className="h-7 w-7" aria-hidden="true" />
               </span>
               <div>
-                <h2 className="text-base font-bold text-[#566283]">{card.label}</h2>
-                <strong className="mt-2 block text-[40px] font-extrabold leading-none text-[#111b45]">
+                <h2 className="text-sm font-bold text-[#566283]">{card.label}</h2>
+                <strong className="mt-2 block text-3xl font-extrabold leading-none text-[#111b45]">
                   {value}
                 </strong>
               </div>
             </div>
-            <div className="mt-9 flex items-end justify-between gap-4">
+            <div className="mt-8 flex items-end justify-between gap-4">
               <span className="font-semibold text-[#566283]">{caption}</span>
               <svg className={`h-10 w-[44%] min-w-[110px] fill-none ${card.accent}`} viewBox="0 0 130 36">
                 <path

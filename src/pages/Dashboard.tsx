@@ -1,16 +1,34 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Download, RefreshCw, RotateCw } from 'lucide-react'
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  LogOut,
+  RefreshCw,
+  RotateCw,
+  ShieldCheck,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { FilterBar } from '../components/FilterBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
 import { TransactionTable } from '../components/TransactionTable'
-import { getTransactionById, getTransactions, retryTransaction } from '../services/api'
+import {
+  getSources,
+  getStatuses,
+  getTransactionById,
+  getTransactions,
+  retryTransaction,
+} from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import type {
   PageResponse,
   Transaction,
   TransactionFilters,
   TransactionSummary,
+  TransactionStatus,
 } from '../types/transaction'
 
 const initialPage: PageResponse<Transaction> = {
@@ -20,6 +38,64 @@ const initialPage: PageResponse<Transaction> = {
   totalElements: 0,
   totalPages: 0,
 }
+
+const fallbackStatuses: TransactionStatus[] = [
+  {
+    code: 'NEW',
+    label: 'New',
+    description: null,
+    color: '#0ea5e9',
+    sortOrder: 10,
+    systemStatus: true,
+    editable: true,
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    code: 'PENDING',
+    label: 'Pending',
+    description: null,
+    color: '#f59e0b',
+    sortOrder: 20,
+    systemStatus: true,
+    editable: true,
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    code: 'PROCESSING',
+    label: 'Processing',
+    description: null,
+    color: '#2563eb',
+    sortOrder: 30,
+    systemStatus: true,
+    editable: true,
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    code: 'SENT',
+    label: 'Sent',
+    description: null,
+    color: '#059669',
+    sortOrder: 40,
+    systemStatus: true,
+    editable: true,
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    code: 'REJECTED',
+    label: 'rejected',
+    description: null,
+    color: '#dc2626',
+    sortOrder: 50,
+    systemStatus: true,
+    editable: true,
+    createdAt: '',
+    updatedAt: '',
+  },
+]
 
 function getApiErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -32,6 +108,10 @@ function getApiErrorMessage(error: unknown) {
 function buildSummary(page: PageResponse<Transaction>): TransactionSummary {
   const counts = page.content.reduce(
     (summary, transaction) => {
+      if (transaction.internalStatus === 'NEW') {
+        summary.new += 1
+      }
+
       if (transaction.internalStatus === 'PENDING') {
         summary.pending += 1
       }
@@ -40,13 +120,13 @@ function buildSummary(page: PageResponse<Transaction>): TransactionSummary {
         summary.sent += 1
       }
 
-      if (transaction.internalStatus === 'FAILED') {
-        summary.failed += 1
+      if (transaction.internalStatus === 'REJECTED') {
+        summary.rejected += 1
       }
 
       return summary
     },
-    { total: page.totalElements, pending: 0, sent: 0, failed: 0 },
+    { total: page.totalElements, new: 0, pending: 0, sent: 0, rejected: 0 },
   )
 
   return counts
@@ -59,6 +139,7 @@ function exportTransactions(transactions: Transaction[]) {
     'Amount',
     'Currency',
     'Type',
+    'Source',
     'Internal Status',
     'Source Status',
     'Value Date',
@@ -70,6 +151,7 @@ function exportTransactions(transactions: Transaction[]) {
     transaction.amount,
     transaction.currency,
     transaction.type,
+    transaction.source,
     transaction.internalStatus,
     transaction.sourceStatus ?? '',
     transaction.valueDate ?? '',
@@ -87,8 +169,12 @@ function exportTransactions(transactions: Transaction[]) {
 }
 
 export function Dashboard() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [filters, setFilters] = useState<TransactionFilters>({})
   const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialPage)
+  const [statuses, setStatuses] = useState<TransactionStatus[]>(fallbackStatuses)
+  const [sources, setSources] = useState<string[]>([])
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
@@ -141,6 +227,20 @@ export function Dashboard() {
     return () => window.clearInterval(timer)
   }, [autoRefresh, loadTransactions])
 
+  useEffect(() => {
+    async function loadMetadata() {
+      try {
+        const [nextStatuses, nextSources] = await Promise.all([getStatuses(), getSources()])
+        setStatuses(nextStatuses.length ? nextStatuses : fallbackStatuses)
+        setSources(nextSources)
+      } catch {
+        setStatuses(fallbackStatuses)
+      }
+    }
+
+    void loadMetadata()
+  }, [])
+
   const summary = useMemo(() => buildSummary(transactionsPage), [transactionsPage])
   const canGoBack = page > 0
   const canGoForward = transactionsPage.totalPages > 0 && page + 1 < transactionsPage.totalPages
@@ -153,6 +253,16 @@ export function Dashboard() {
   const handleResetFilters = () => {
     setFilters({})
     setPage(0)
+  }
+
+  const handleSourceSelect = (source: string) => {
+    setFilters((current) => ({ ...current, source }))
+    setPage(0)
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
   }
 
   const handleSelectTransaction = async (transaction: Transaction) => {
@@ -229,6 +339,23 @@ export function Dashboard() {
             >
               <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
             </button>
+            {user?.role === 'ADMIN' ? (
+              <Link
+                className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+                to="/admin"
+              >
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                Admin
+              </Link>
+            ) : null}
+            <button
+              className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+              type="button"
+              onClick={handleLogout}
+              aria-label="Logout"
+            >
+              <LogOut className="h-5 w-5" aria-hidden="true" />
+            </button>
           </div>
         </header>
 
@@ -237,6 +364,8 @@ export function Dashboard() {
         <div className="mt-6">
           <FilterBar
             filters={filters}
+            statuses={statuses}
+            sources={sources}
             autoRefresh={autoRefresh}
             isLoading={isLoading}
             onFiltersChange={handleFiltersChange}
@@ -274,7 +403,10 @@ export function Dashboard() {
           <TransactionTable
             transactions={transactionsPage.content}
             isLoading={isLoading}
+            isRetrying={isRetrying}
             onSelect={handleSelectTransaction}
+            onRetry={handleRetry}
+            onSourceSelect={handleSourceSelect}
           />
 
           <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">

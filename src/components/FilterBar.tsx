@@ -1,16 +1,10 @@
 import { Filter, RefreshCw, Search } from 'lucide-react'
-import type { InternalStatus, TransactionFilters } from '../types/transaction'
-
-const statuses: Array<{ label: string; value: InternalStatus | '' }> = [
-  { label: 'All Statuses', value: '' },
-  { label: 'Pending', value: 'PENDING' },
-  { label: 'Processing', value: 'PROCESSING' },
-  { label: 'Sent', value: 'SENT' },
-  { label: 'Failed', value: 'FAILED' },
-]
+import type { TransactionFilters, TransactionStatus } from '../types/transaction'
 
 interface FilterBarProps {
   filters: TransactionFilters
+  statuses: TransactionStatus[]
+  sources: string[]
   autoRefresh: boolean
   isLoading: boolean
   onFiltersChange: (filters: TransactionFilters) => void
@@ -24,6 +18,8 @@ const inputClass =
 
 export function FilterBar({
   filters,
+  statuses,
+  sources,
   isLoading,
   onFiltersChange,
   onRefresh,
@@ -31,7 +27,7 @@ export function FilterBar({
 }: FilterBarProps) {
   return (
     <section className="rounded-2xl border border-[#dfe6f4] bg-white/70 px-6 py-6 shadow-[0_12px_34px_rgba(31,48,96,0.05)]">
-      <div className="grid gap-7 lg:grid-cols-[1.25fr_1.65fr_1fr_1fr_auto] lg:items-end">
+      <div className="grid gap-7 lg:grid-cols-[1.1fr_1.1fr_1.45fr_1fr_1fr_auto] lg:items-end">
         <label className="flex flex-col gap-3 text-sm font-bold text-[#18234f]">
           Status
           <select
@@ -40,13 +36,35 @@ export function FilterBar({
             onChange={(event) =>
               onFiltersChange({
                 ...filters,
-                internalStatus: event.target.value as InternalStatus | '',
+                internalStatus: event.target.value,
               })
             }
           >
+            <option value="">All Statuses</option>
             {statuses.map((status) => (
-              <option key={status.label} value={status.value}>
+              <option key={status.code} value={status.code}>
                 {status.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-3 text-sm font-bold text-[#18234f]">
+          Source
+          <select
+            className={inputClass}
+            value={filters.source ?? ''}
+            onChange={(event) =>
+              onFiltersChange({
+                ...filters,
+                source: event.target.value,
+              })
+            }
+          >
+            <option value="">All Sources</option>
+            {sources.map((source) => (
+              <option key={source} value={source}>
+                {source}
               </option>
             ))}
           </select>

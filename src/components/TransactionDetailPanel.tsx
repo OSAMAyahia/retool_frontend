@@ -81,6 +81,7 @@ export function TransactionDetailPanel({
             <Field label="Account ID" value={transaction.accountId} />
             <Field label="Amount" value={`${transaction.amount.toFixed(2)} ${transaction.currency}`} />
             <Field label="Type" value={transaction.type} />
+            <Field label="Source" value={transaction.source} />
             <Field label="Source Status" value={transaction.sourceStatus} />
             <Field label="Retry Count" value={transaction.retryCount} />
             <Field label="Odoo Reference ID" value={transaction.odooReferenceId} />
@@ -129,7 +130,7 @@ export function TransactionDetailPanel({
           </section>
         </div>
 
-        {transaction.internalStatus === 'FAILED' ? (
+        {transaction.internalStatus === 'REJECTED' ? (
           <footer className="border-t border-slate-200 px-5 py-4">
             <button
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -146,4 +147,3 @@ export function TransactionDetailPanel({
     </div>
   )
 }
-

@@ -1,4 +1,4 @@
-export type InternalStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED'
+export type InternalStatus = string
 
 export interface Transaction {
   transactionId: string
@@ -7,6 +7,7 @@ export interface Transaction {
   currency: string
   type: string
   sourceStatus: string | null
+  source: string
   internalStatus: InternalStatus
   description: string | null
   valueDate: string | null
@@ -28,6 +29,7 @@ export interface PageResponse<T> {
 
 export interface TransactionFilters {
   internalStatus?: InternalStatus | ''
+  source?: string
   accountId?: string
   dateFrom?: string
   dateTo?: string
@@ -35,8 +37,20 @@ export interface TransactionFilters {
 
 export interface TransactionSummary {
   total: number
+  new: number
   pending: number
   sent: number
-  failed: number
+  rejected: number
 }
 
+export interface TransactionStatus {
+  code: string
+  label: string
+  description: string | null
+  color: string
+  sortOrder: number
+  systemStatus: boolean
+  editable: boolean
+  createdAt: string
+  updatedAt: string
+}

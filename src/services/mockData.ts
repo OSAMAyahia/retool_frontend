@@ -8,7 +8,8 @@ const demoTransactions: Transaction[] = [
     currency: 'SAR',
     type: 'credit',
     sourceStatus: 'new',
-    internalStatus: 'PENDING',
+    source: 'Retool',
+    internalStatus: 'NEW',
     description: 'Salary Deposit',
     valueDate: '2026-06-25T08:00:00Z',
     retryCount: 0,
@@ -32,6 +33,7 @@ const demoTransactions: Transaction[] = [
     currency: 'SAR',
     type: 'credit',
     sourceStatus: 'processing',
+    source: 'Bank API',
     internalStatus: 'PROCESSING',
     description: 'Salary Deposit',
     valueDate: '2026-06-25T08:00:00Z',
@@ -52,6 +54,7 @@ const demoTransactions: Transaction[] = [
     currency: 'SAR',
     type: 'debit',
     sourceStatus: 'posted',
+    source: 'Retool',
     internalStatus: 'SENT',
     description: 'Vendor Payment',
     valueDate: '2026-06-24T11:30:00Z',
@@ -72,7 +75,8 @@ const demoTransactions: Transaction[] = [
     currency: 'SAR',
     type: 'debit',
     sourceStatus: 'review',
-    internalStatus: 'FAILED',
+    source: 'Partner Portal',
+    internalStatus: 'REJECTED',
     description: 'Expense Reimbursement',
     valueDate: '2026-06-23T13:45:00Z',
     retryCount: 3,
@@ -93,6 +97,7 @@ const demoTransactions: Transaction[] = [
     currency: 'SAR',
     type: 'credit',
     sourceStatus: 'posted',
+    source: 'Bank API',
     internalStatus: 'SENT',
     description: 'Client Settlement',
     valueDate: '2026-06-22T09:15:00Z',
@@ -123,13 +128,14 @@ export function getMockTransactions(
   const filtered = demoTransactions.filter((transaction) => {
     const valueDate = transaction.valueDate ? new Date(transaction.valueDate) : null
     const matchesStatus = statusMatches(transaction.internalStatus, filters.internalStatus)
+    const matchesSource = !filters.source || transaction.source === filters.source
     const matchesAccount =
       !filters.accountId ||
       transaction.accountId.toLowerCase().includes(filters.accountId.toLowerCase())
     const matchesFrom = !dateFrom || (valueDate && valueDate >= dateFrom)
     const matchesTo = !dateTo || (valueDate && valueDate <= dateTo)
 
-    return matchesStatus && matchesAccount && matchesFrom && matchesTo
+    return matchesStatus && matchesSource && matchesAccount && matchesFrom && matchesTo
   })
 
   const start = page * size
@@ -143,4 +149,3 @@ export function getMockTransactions(
     totalPages: Math.ceil(filtered.length / size),
   }
 }
-
