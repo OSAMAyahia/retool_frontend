@@ -97,6 +97,8 @@ const fallbackStatuses: TransactionStatus[] = [
   },
 ]
 
+const fallbackSources = ['Retool', 'Bank API', 'Partner Portal']
+
 function getApiErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message
@@ -174,7 +176,7 @@ export function Dashboard() {
   const [filters, setFilters] = useState<TransactionFilters>({})
   const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialPage)
   const [statuses, setStatuses] = useState<TransactionStatus[]>(fallbackStatuses)
-  const [sources, setSources] = useState<string[]>([])
+  const [sources, setSources] = useState<string[]>(fallbackSources)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
@@ -232,9 +234,10 @@ export function Dashboard() {
       try {
         const [nextStatuses, nextSources] = await Promise.all([getStatuses(), getSources()])
         setStatuses(nextStatuses.length ? nextStatuses : fallbackStatuses)
-        setSources(nextSources)
+        setSources(nextSources.length ? nextSources : fallbackSources)
       } catch {
         setStatuses(fallbackStatuses)
+        setSources(fallbackSources)
       }
     }
 

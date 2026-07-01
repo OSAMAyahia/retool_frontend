@@ -9,7 +9,8 @@ import {
   SlidersHorizontal,
   Users,
 } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
