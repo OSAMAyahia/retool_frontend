@@ -314,7 +314,7 @@ export function Dashboard() {
     setActionError(null)
 
     try {
-            setActionMessage(`Sending 0 of ${importRows.length} rows...`)
+      setActionMessage(`Sending 0 of ${importRows.length} rows...`)
       const result = await ingestTransactions(importRows, (sent, total) => {
         setActionMessage(`Sending ${sent} of ${total} rows...`)
       })
@@ -324,24 +324,38 @@ export function Dashboard() {
       setIsImportPopupOpen(false)
       setImportRows([])
 
-      if (result.received === 0) {
-        const itemMessages = result.items
-          .flatMap((item: unknown) => {
-            if (item && typeof item === 'object' && 'messages' in item) {
-              const messages = (item as { messages?: unknown }).messages
-              return Array.isArray(messages) ? messages.map(String) : []
-            }
+      const resultSummary = `Imported ${result.received} new rows. Duplicates ${result.duplicates}. Failed ${result.failed}.`
+      const itemMessages = result.items
+        .flatMap((item: unknown) => {
+          if (!item || typeof item !== 'object') {
             return []
-          })
-          .filter(Boolean)
+          }
 
-        setActionError(
-          itemMessages.length
-            ? `Import did not add rows. ${itemMessages.join(' ')}`
-            : 'Import did not add rows. The backend returned 0 imported rows, so nothing was added to the table.',
+          const candidate = item as { errors?: unknown; messages?: unknown; transactionId?: unknown; status?: unknown }
+          const messages = Array.isArray(candidate.errors)
+            ? candidate.errors
+            : Array.isArray(candidate.messages)
+              ? candidate.messages
+              : []
+          const prefix = candidate.transactionId ? `${String(candidate.transactionId)}: ` : ''
+          return messages.map((message) => `${prefix}${String(message)}`)
+        })
+        .filter(Boolean)
+
+      if (result.received === 0 && result.duplicates > 0 && result.failed === 0) {
+        setActionMessage(
+          `No new rows imported. ${result.duplicates} duplicate rows already exist in the dashboard. The table was refreshed.`,
         )
       } else {
-        setActionMessage(`Imported ${result.received} rows. Duplicates ${result.duplicates}. Failed ${result.failed}.`)
+        setActionMessage(resultSummary)
+      }
+
+      if (result.failed > 0) {
+        setActionError(
+          itemMessages.length
+            ? `Some rows failed: ${itemMessages.slice(0, 5).join(' | ')}`
+            : `Some rows failed. ${resultSummary}`,
+        )
       }
 
       await loadTransactions(false, nextFilters, 0)
@@ -603,6 +617,7 @@ export function Dashboard() {
     </main>
   )
 }
+
 
 
 
