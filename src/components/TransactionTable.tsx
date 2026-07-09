@@ -86,7 +86,10 @@ export function TransactionTable({
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
             {columns.map((column, index) => (
-              <th key={`${column}-${index}`} className="h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em]">
+              <th
+                key={`${column}-${index}`}
+                className={`h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em] ${column === 'Amount' ? 'text-right' : 'text-left'}`}
+              >
                 {column}
               </th>
             ))}
@@ -164,4 +167,5 @@ export function TransactionTable({
     </div>
   )
 }
+
 
