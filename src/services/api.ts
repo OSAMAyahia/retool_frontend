@@ -199,30 +199,67 @@ export async function getTransactions(
   return normalizeTransactionPage(response.data)
 }
 
-export async function ingestTransactions(
-  rows: IngestTransactionPayload[],
-  onProgress?: (sent: number, total: number) => void,
-): Promise<IngestSummaryResponse> {
-  const batchSize = 100
-  const summary: IngestSummaryResponse = {
+function createEmptyIngestSummary(): IngestSummaryResponse {
+  return {
     received: 0,
     duplicates: 0,
     failed: 0,
     processedAt: new Date().toISOString(),
     items: [],
   }
+}
+
+function mergeIngestSummary(
+  target: IngestSummaryResponse,
+  source: IngestSummaryResponse,
+): IngestSummaryResponse {
+  target.received += source.received ?? 0
+  target.duplicates += source.duplicates ?? 0
+  target.failed += source.failed ?? 0
+  target.processedAt = source.processedAt ?? target.processedAt
+  target.items.push(...(source.items ?? []))
+  return target
+}
+
+function isTimeoutError(error: unknown) {
+  return axios.isAxiosError(error) && error.code === 'ECONNABORTED'
+}
+
+async function postIngestBatch(rows: IngestTransactionPayload[]): Promise<IngestSummaryResponse> {
+  const response = await api.post<IngestSummaryResponse>('/transactions/ingest', rows, {
+    timeout: 120000,
+  })
+  return response.data
+}
+
+async function postAdaptiveIngestBatch(
+  rows: IngestTransactionPayload[],
+): Promise<IngestSummaryResponse> {
+  try {
+    return await postIngestBatch(rows)
+  } catch (error) {
+    if (!isTimeoutError(error) || rows.length <= 1) {
+      throw error
+    }
+
+    const midpoint = Math.ceil(rows.length / 2)
+    const summary = createEmptyIngestSummary()
+    mergeIngestSummary(summary, await postAdaptiveIngestBatch(rows.slice(0, midpoint)))
+    mergeIngestSummary(summary, await postAdaptiveIngestBatch(rows.slice(midpoint)))
+    return summary
+  }
+}
+
+export async function ingestTransactions(
+  rows: IngestTransactionPayload[],
+  onProgress?: (sent: number, total: number) => void,
+): Promise<IngestSummaryResponse> {
+  const batchSize = 25
+  const summary = createEmptyIngestSummary()
 
   for (let start = 0; start < rows.length; start += batchSize) {
     const batch = rows.slice(start, start + batchSize)
-    const response = await api.post<IngestSummaryResponse>('/transactions/ingest', batch, {
-      timeout: 120000,
-    })
-
-    summary.received += response.data.received ?? 0
-    summary.duplicates += response.data.duplicates ?? 0
-    summary.failed += response.data.failed ?? 0
-    summary.processedAt = response.data.processedAt ?? summary.processedAt
-    summary.items.push(...(response.data.items ?? []))
+    mergeIngestSummary(summary, await postAdaptiveIngestBatch(batch))
     onProgress?.(Math.min(start + batch.length, rows.length), rows.length)
   }
 
@@ -331,6 +368,7 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
+
 
 
 
