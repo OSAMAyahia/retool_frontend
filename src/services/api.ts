@@ -1,6 +1,9 @@
 import axios, { AxiosHeaders } from 'axios'
 import type {
+  IngestSummaryResponse,
+  Journal,
   PageResponse,
+  ProcessingResponse,
   Transaction,
   TransactionFilters,
   TransactionStatus,
@@ -8,7 +11,7 @@ import type {
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1',
-  timeout: 10000,
+  timeout: 30000,
 })
 
 export const AUTH_TOKEN_STORAGE_KEY = 'retool_odoo_auth_token'
@@ -101,18 +104,26 @@ api.interceptors.request.use((config) => {
 })
 
 function normalizeStatus(status: string) {
-  return status === 'FAILED' ? 'REJECTED' : status
+  if (status === 'FAILED') {
+    return 'REJECTED'
+  }
+
+  if (status === 'UN_COMPLETED' || status === 'UNCOMPLETED') {
+    return 'un-completed'
+  }
+
+  return status
 }
 
 function normalizeTransaction(transaction: BackendTransaction): Transaction {
   return {
     ...transaction,
-    source: transaction.source ?? 'Retool',
+    source: transaction.source ?? 'Excel',
     internalStatus: normalizeStatus(transaction.internalStatus),
   }
 }
 
-function normalizePage(
+function normalizeTransactionPage(
   data: BackendPage<BackendTransaction> | BackendTransaction[],
 ): PageResponse<Transaction> {
   if (Array.isArray(data)) {
@@ -128,6 +139,28 @@ function normalizePage(
   }
 
   const content = (data.content ?? []).map(normalizeTransaction)
+
+  return {
+    content,
+    page: data.page ?? data.number ?? 0,
+    size: data.size ?? content.length,
+    totalElements: data.totalElements ?? content.length,
+    totalPages: data.totalPages ?? (content.length > 0 ? 1 : 0),
+  }
+}
+
+function normalizeJournalPage(data: BackendPage<Journal> | Journal[]): PageResponse<Journal> {
+  if (Array.isArray(data)) {
+    return {
+      content: data,
+      page: 0,
+      size: data.length,
+      totalElements: data.length,
+      totalPages: data.length > 0 ? 1 : 0,
+    }
+  }
+
+  const content = data.content ?? []
 
   return {
     content,
@@ -155,7 +188,33 @@ export async function getTransactions(
     },
   })
 
-  return normalizePage(response.data)
+  return normalizeTransactionPage(response.data)
+}
+
+export async function importTransactionsExcel(file: File): Promise<IngestSummaryResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await api.post<IngestSummaryResponse>('/transactions/import-excel', formData)
+  return response.data
+}
+
+export async function processJournals(): Promise<ProcessingResponse> {
+  const response = await api.post<ProcessingResponse>('/journals/process')
+  return response.data
+}
+
+export async function getJournals(page: number, size: number): Promise<PageResponse<Journal>> {
+  const response = await api.get<BackendPage<Journal> | Journal[]>('/journals', {
+    params: { page, size },
+  })
+
+  return normalizeJournalPage(response.data)
+}
+
+export async function sendJournalsToOdoo(): Promise<ProcessingResponse> {
+  const response = await api.post<ProcessingResponse>('/journals/send-to-odoo')
+  return response.data
 }
 
 export async function getTransactionById(transactionId: string): Promise<Transaction> {

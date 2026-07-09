@@ -1,29 +1,38 @@
 import {
   AlertCircle,
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  Download,
+  FileSpreadsheet,
+  ListChecks,
   LogOut,
   RefreshCw,
   RotateCw,
+  Send,
   ShieldCheck,
+  Upload,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
+import { JournalTable } from '../components/JournalTable'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
 import { TransactionTable } from '../components/TransactionTable'
 import {
+  getJournals,
   getSources,
-  getStatuses,
   getTransactionById,
   getTransactions,
+  importTransactionsExcel,
+  processJournals,
   retryTransaction,
+  sendJournalsToOdoo,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import type {
+  Journal,
   PageResponse,
   Transaction,
   TransactionFilters,
@@ -31,7 +40,7 @@ import type {
   TransactionStatus,
 } from '../types/transaction'
 
-const initialPage: PageResponse<Transaction> = {
+const initialTransactionsPage: PageResponse<Transaction> = {
   content: [],
   page: 0,
   size: 10,
@@ -39,65 +48,42 @@ const initialPage: PageResponse<Transaction> = {
   totalPages: 0,
 }
 
-const fallbackStatuses: TransactionStatus[] = [
+const initialJournalsPage: PageResponse<Journal> = {
+  content: [],
+  page: 0,
+  size: 100,
+  totalElements: 0,
+  totalPages: 0,
+}
+
+const dashboardStatuses: TransactionStatus[] = [
   {
-    code: 'NEW',
-    label: 'New',
-    description: null,
-    color: '#0ea5e9',
-    sortOrder: 10,
-    systemStatus: true,
-    editable: true,
-    createdAt: '',
-    updatedAt: '',
-  },
-  {
-    code: 'PENDING',
-    label: 'Pending',
+    code: 'un-completed',
+    label: 'Un-completed',
     description: null,
     color: '#f59e0b',
-    sortOrder: 20,
+    sortOrder: 10,
     systemStatus: true,
-    editable: true,
+    editable: false,
     createdAt: '',
     updatedAt: '',
   },
   {
-    code: 'PROCESSING',
-    label: 'Processing',
-    description: null,
-    color: '#2563eb',
-    sortOrder: 30,
-    systemStatus: true,
-    editable: true,
-    createdAt: '',
-    updatedAt: '',
-  },
-  {
-    code: 'SENT',
-    label: 'Sent',
+    code: 'completed',
+    label: 'Completed',
     description: null,
     color: '#059669',
-    sortOrder: 40,
+    sortOrder: 20,
     systemStatus: true,
-    editable: true,
-    createdAt: '',
-    updatedAt: '',
-  },
-  {
-    code: 'REJECTED',
-    label: 'rejected',
-    description: null,
-    color: '#dc2626',
-    sortOrder: 50,
-    systemStatus: true,
-    editable: true,
+    editable: false,
     createdAt: '',
     updatedAt: '',
   },
 ]
 
-const fallbackSources = ['Retool', 'Bank API', 'Partner Portal']
+const fallbackSources = ['Excel', 'Retool', 'Bank API', 'Partner Portal']
+
+type ViewMode = 'dashboard' | 'journal'
 
 function getApiErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -107,86 +93,48 @@ function getApiErrorMessage(error: unknown) {
   return 'Unknown error'
 }
 
-function buildSummary(page: PageResponse<Transaction>): TransactionSummary {
+function buildSummary(page: PageResponse<Transaction>, journalRows: number): TransactionSummary {
   const counts = page.content.reduce(
     (summary, transaction) => {
-      if (transaction.internalStatus === 'NEW') {
-        summary.new += 1
+      if (transaction.internalStatus === 'completed') {
+        summary.completed += 1
       }
 
-      if (transaction.internalStatus === 'PENDING') {
-        summary.pending += 1
-      }
-
-      if (transaction.internalStatus === 'SENT') {
-        summary.sent += 1
-      }
-
-      if (transaction.internalStatus === 'REJECTED') {
-        summary.rejected += 1
+      if (transaction.internalStatus === 'un-completed') {
+        summary.unCompleted += 1
       }
 
       return summary
     },
-    { total: page.totalElements, new: 0, pending: 0, sent: 0, rejected: 0 },
+    { total: page.totalElements, completed: 0, unCompleted: 0, journalRows },
   )
 
   return counts
 }
 
-function exportTransactions(transactions: Transaction[]) {
-  const headers = [
-    'Transaction ID',
-    'Account ID',
-    'Amount',
-    'Currency',
-    'Type',
-    'Source',
-    'Internal Status',
-    'Source Status',
-    'Value Date',
-    'Retry Count',
-  ]
-  const rows = transactions.map((transaction) => [
-    transaction.transactionId,
-    transaction.accountId,
-    transaction.amount,
-    transaction.currency,
-    transaction.type,
-    transaction.source,
-    transaction.internalStatus,
-    transaction.sourceStatus ?? '',
-    transaction.valueDate ?? '',
-    transaction.retryCount,
-  ])
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
-    .join('\n')
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'transactions-report.csv'
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 export function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('dashboard')
   const [filters, setFilters] = useState<TransactionFilters>({})
-  const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialPage)
-  const [statuses, setStatuses] = useState<TransactionStatus[]>(fallbackStatuses)
+  const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialTransactionsPage)
+  const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
   const [sources, setSources] = useState<string[]>(fallbackSources)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
   const [isLoading, setIsLoading] = useState(true)
+  const [isJournalLoading, setIsJournalLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryMessage, setRetryMessage] = useState<string | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [isActionLoading, setIsActionLoading] = useState(false)
 
   const loadTransactions = useCallback(
     async (showLoading = true) => {
@@ -209,16 +157,30 @@ export function Dashboard() {
     [filters, page, size],
   )
 
+  const loadJournals = useCallback(async () => {
+    setIsJournalLoading(true)
+
+    try {
+      const response = await getJournals(0, 100)
+      setJournalsPage(response)
+    } catch {
+      setJournalsPage(initialJournalsPage)
+    } finally {
+      setIsJournalLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadTransactions()
+      void loadJournals()
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [loadTransactions])
+  }, [loadJournals, loadTransactions])
 
   useEffect(() => {
-    if (!autoRefresh) {
+    if (!autoRefresh || viewMode !== 'dashboard') {
       return
     }
 
@@ -227,16 +189,14 @@ export function Dashboard() {
     }, 15000)
 
     return () => window.clearInterval(timer)
-  }, [autoRefresh, loadTransactions])
+  }, [autoRefresh, loadTransactions, viewMode])
 
   useEffect(() => {
     async function loadMetadata() {
       try {
-        const [nextStatuses, nextSources] = await Promise.all([getStatuses(), getSources()])
-        setStatuses(nextStatuses.length ? nextStatuses : fallbackStatuses)
+        const nextSources = await getSources()
         setSources(nextSources.length ? nextSources : fallbackSources)
       } catch {
-        setStatuses(fallbackStatuses)
         setSources(fallbackSources)
       }
     }
@@ -244,7 +204,10 @@ export function Dashboard() {
     void loadMetadata()
   }, [])
 
-  const summary = useMemo(() => buildSummary(transactionsPage), [transactionsPage])
+  const summary = useMemo(
+    () => buildSummary(transactionsPage, journalsPage.totalElements),
+    [journalsPage.totalElements, transactionsPage],
+  )
   const canGoBack = page > 0
   const canGoForward = transactionsPage.totalPages > 0 && page + 1 < transactionsPage.totalPages
 
@@ -302,16 +265,76 @@ export function Dashboard() {
     }
   }
 
+  const handleImportExcel = async (file: File | undefined) => {
+    if (!file) {
+      return
+    }
+
+    setIsActionLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+
+    try {
+      const result = await importTransactionsExcel(file)
+      setActionMessage(`Imported ${result.received} rows. Failed ${result.failed}.`)
+      await loadTransactions(false)
+      await loadJournals()
+    } catch (importError) {
+      setActionError(`Import failed. ${getApiErrorMessage(importError)}`)
+    } finally {
+      setIsActionLoading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleProcessJournals = async () => {
+    setIsActionLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+
+    try {
+      const result = await processJournals()
+      setActionMessage(`Journal processing completed for ${result.processed} rows.`)
+      await loadTransactions(false)
+      await loadJournals()
+      setViewMode('journal')
+    } catch (processError) {
+      setActionError(`Journal processing failed. ${getApiErrorMessage(processError)}`)
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleSendToOdoo = async () => {
+    setIsActionLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+
+    try {
+      const result = await sendJournalsToOdoo()
+      setActionMessage(`Updated ${result.processed} journal rows as sent to Odoo.`)
+      await loadJournals()
+    } catch (odooError) {
+      setActionError(`Odoo update failed. ${getApiErrorMessage(odooError)}`)
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f6f8fc] px-4 py-4 text-[#172452] sm:px-6">
       <section className="mx-auto min-h-[calc(100vh-2rem)] w-full max-w-[1840px] rounded-2xl border border-[#dfe6f4] bg-white/80 px-5 py-7 shadow-[0_18px_50px_rgba(35,48,85,0.08)] sm:px-8 lg:px-12">
         <header className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 className="text-3xl font-extrabold tracking-normal text-[#111b45] lg:text-[34px]">
-              Transactions Dashboard
+              {viewMode === 'dashboard' ? 'Transactions Dashboard' : 'Journal Table'}
             </h1>
             <p className="mt-2 text-base font-medium text-[#617096]">
-              Monitor and sync all your Odoo transactions in real-time
+              {viewMode === 'dashboard'
+                ? 'Import Excel rows and prepare them for journal processing'
+                : 'Processed journal rows with original processing statuses'}
             </p>
           </div>
 
@@ -325,22 +348,79 @@ export function Dashboard() {
                 </strong>
               </span>
             </div>
-            <button
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
-              type="button"
-              onClick={() => exportTransactions(transactionsPage.content)}
-            >
-              <Download className="h-5 w-5" aria-hidden="true" />
-              Export Report
-            </button>
+
+            {viewMode === 'dashboard' ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  className="hidden"
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(event) => void handleImportExcel(event.target.files?.[0])}
+                />
+                <button
+                  className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isActionLoading}
+                >
+                  <Upload className="h-5 w-5" aria-hidden="true" />
+                  Import Excel
+                </button>
+                <button
+                  className="inline-flex h-14 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-6 text-sm font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
+                  type="button"
+                  onClick={() => void handleProcessJournals()}
+                  disabled={isActionLoading}
+                >
+                  <FileSpreadsheet className="h-5 w-5" aria-hidden="true" />
+                  Journal Processing
+                </button>
+                <button
+                  className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+                  type="button"
+                  onClick={() => {
+                    setViewMode('journal')
+                    void loadJournals()
+                  }}
+                >
+                  <ListChecks className="h-5 w-5" aria-hidden="true" />
+                  Journal Table
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+                  type="button"
+                  onClick={() => setViewMode('dashboard')}
+                >
+                  <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+                  Back to Dashboard
+                </button>
+                <button
+                  className="inline-flex h-14 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-6 text-sm font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
+                  type="button"
+                  onClick={() => void handleSendToOdoo()}
+                  disabled={isActionLoading}
+                >
+                  <Send className="h-5 w-5" aria-hidden="true" />
+                  Send to Odoo
+                </button>
+              </>
+            )}
+
             <button
               className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
-              onClick={() => void loadTransactions()}
-              disabled={isLoading}
+              onClick={() => {
+                void loadTransactions()
+                void loadJournals()
+              }}
+              disabled={isLoading || isJournalLoading}
               aria-label="Refresh transactions"
             >
-              <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <RefreshCw className={`h-5 w-5 ${isLoading || isJournalLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
             </button>
             {user?.role === 'ADMIN' ? (
               <Link
@@ -364,99 +444,119 @@ export function Dashboard() {
 
         <SummaryCards summary={summary} />
 
-        <div className="mt-6">
-          <FilterBar
-            filters={filters}
-            statuses={statuses}
-            sources={sources}
-            autoRefresh={autoRefresh}
-            isLoading={isLoading}
-            onFiltersChange={handleFiltersChange}
-            onRefresh={() => void loadTransactions()}
-            onAutoRefreshChange={setAutoRefresh}
-            onReset={handleResetFilters}
-          />
-        </div>
-
-        {error ? (
-          <div className="mt-6 grid items-center gap-5 rounded-2xl border border-[#ffc987] bg-gradient-to-r from-[#ff972814] to-white/80 p-5 text-sm sm:grid-cols-[auto_1fr_auto]">
-            <span className="grid h-16 w-16 place-items-center rounded-full border-2 border-[#ff9a20] bg-[#fff7ec] text-[#ff8a00]">
-              <AlertCircle className="h-8 w-8" aria-hidden="true" />
-            </span>
-            <div>
-              <strong className="block text-base font-bold text-[#aa4a00]">
-                Unable to connect to backend
-              </strong>
-              <p className="mt-1 font-medium text-[#4e5f8b]">
-                /transactions endpoint is not available yet. Showing demo data. ({error})
-              </p>
-            </div>
-            <button
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)]"
-              type="button"
-              onClick={() => void loadTransactions()}
-            >
-              <RefreshCw className="h-5 w-5" aria-hidden="true" />
-              Retry Connection
-            </button>
+        {actionMessage ? (
+          <div className="mt-6 rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
+            {actionMessage}
+          </div>
+        ) : null}
+        {actionError ? (
+          <div className="mt-6 rounded-2xl border border-[#ffb8c2] bg-[#fff1f2] px-5 py-4 text-sm font-bold text-[#dc2626]">
+            {actionError}
           </div>
         ) : null}
 
-        <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          <TransactionTable
-            transactions={transactionsPage.content}
-            isLoading={isLoading}
-            isRetrying={isRetrying}
-            onSelect={handleSelectTransaction}
-            onRetry={handleRetry}
-            onSourceSelect={handleSourceSelect}
-          />
-
-          <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              Showing {transactionsPage.content.length === 0 ? 0 : page * size + 1} to{' '}
-              {Math.min((page + 1) * size, transactionsPage.totalElements)} of{' '}
-              {transactionsPage.totalElements} results
+        {viewMode === 'dashboard' ? (
+          <>
+            <div className="mt-6">
+              <FilterBar
+                filters={filters}
+                statuses={dashboardStatuses}
+                sources={sources}
+                autoRefresh={autoRefresh}
+                isLoading={isLoading}
+                onFiltersChange={handleFiltersChange}
+                onRefresh={() => void loadTransactions()}
+                onAutoRefreshChange={setAutoRefresh}
+                onReset={handleResetFilters}
+              />
             </div>
-            <div className="flex items-center gap-3">
-              <select
-                className="h-11 rounded-xl border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452] outline-none focus:border-[#5748f5] focus:ring-2 focus:ring-[#5748f5]/15"
-                value={size}
-                onChange={(event) => {
-                  setSize(Number(event.target.value))
-                  setPage(0)
-                }}
-              >
-                {[10, 25, 50].map((option) => (
-                  <option key={option} value={option}>
-                    {option} / page
-                  </option>
-                ))}
-              </select>
-              <button
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={() => setPage((current) => Math.max(current - 1, 0))}
-                disabled={!canGoBack}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-              </button>
-              <strong className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#7354ff] to-[#563cee] text-white shadow-[0_10px_18px_rgba(88,58,235,0.22)]">
-                {transactionsPage.totalPages === 0 ? 0 : page + 1}
-              </strong>
-              <button
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={() => setPage((current) => current + 1)}
-                disabled={!canGoForward}
-                aria-label="Next page"
-              >
-                <ChevronRight className="h-5 w-5" aria-hidden="true" />
-              </button>
+
+            {error ? (
+              <div className="mt-6 grid items-center gap-5 rounded-2xl border border-[#ffc987] bg-gradient-to-r from-[#ff972814] to-white/80 p-5 text-sm sm:grid-cols-[auto_1fr_auto]">
+                <span className="grid h-16 w-16 place-items-center rounded-full border-2 border-[#ff9a20] bg-[#fff7ec] text-[#ff8a00]">
+                  <AlertCircle className="h-8 w-8" aria-hidden="true" />
+                </span>
+                <div>
+                  <strong className="block text-base font-bold text-[#aa4a00]">
+                    Unable to connect to backend
+                  </strong>
+                  <p className="mt-1 font-medium text-[#4e5f8b]">
+                    /transactions endpoint is not available yet. Showing demo data. ({error})
+                  </p>
+                </div>
+                <button
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)]"
+                  type="button"
+                  onClick={() => void loadTransactions()}
+                >
+                  <RefreshCw className="h-5 w-5" aria-hidden="true" />
+                  Retry Connection
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
+              <TransactionTable
+                transactions={transactionsPage.content}
+                isLoading={isLoading}
+                onSelect={handleSelectTransaction}
+                onSourceSelect={handleSourceSelect}
+              />
+
+              <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  Showing {transactionsPage.content.length === 0 ? 0 : page * size + 1} to{' '}
+                  {Math.min((page + 1) * size, transactionsPage.totalElements)} of{' '}
+                  {transactionsPage.totalElements} results
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    className="h-11 rounded-xl border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452] outline-none focus:border-[#5748f5] focus:ring-2 focus:ring-[#5748f5]/15"
+                    value={size}
+                    onChange={(event) => {
+                      setSize(Number(event.target.value))
+                      setPage(0)
+                    }}
+                  >
+                    {[10, 25, 50].map((option) => (
+                      <option key={option} value={option}>
+                        {option} / page
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(current - 1, 0))}
+                    disabled={!canGoBack}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <strong className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#7354ff] to-[#563cee] text-white shadow-[0_10px_18px_rgba(88,58,235,0.22)]">
+                    {transactionsPage.totalPages === 0 ? 0 : page + 1}
+                  </strong>
+                  <button
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    onClick={() => setPage((current) => current + 1)}
+                    disabled={!canGoForward}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
+            <JournalTable journals={journalsPage.content} isLoading={isJournalLoading} />
+            <div className="border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
+              Showing {journalsPage.content.length} of {journalsPage.totalElements} journal rows
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       <TransactionDetailPanel

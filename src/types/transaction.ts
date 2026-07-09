@@ -19,6 +19,36 @@ export interface Transaction {
   rawPayload?: unknown
 }
 
+export interface Journal {
+  transactionId: string
+  journalDate: string | null
+  journal: string | null
+  reference: string | null
+  itemLabel: string | null
+  itemAccount: string | null
+  debit: number | null
+  credit: number | null
+  analytic: string | null
+  status: string
+  odooReferenceId: string | null
+  createdAt: string
+  updatedAt: string
+  rawPayload?: unknown
+}
+
+export interface ProcessingResponse {
+  processed: number
+  processedAt: string
+}
+
+export interface IngestSummaryResponse {
+  received: number
+  duplicates: number
+  failed: number
+  processedAt: string
+  items: unknown[]
+}
+
 export interface PageResponse<T> {
   content: T[]
   page: number
@@ -37,10 +67,9 @@ export interface TransactionFilters {
 
 export interface TransactionSummary {
   total: number
-  new: number
-  pending: number
-  sent: number
-  rejected: number
+  completed: number
+  unCompleted: number
+  journalRows: number
 }
 
 export interface TransactionStatus {

@@ -1,13 +1,11 @@
-import { CalendarDays, Database, MoreVertical, RotateCw } from 'lucide-react'
+import { CalendarDays, Database } from 'lucide-react'
 import type { Transaction } from '../types/transaction'
 import { StatusBadge } from './StatusBadge'
 
 interface TransactionTableProps {
   transactions: Transaction[]
   isLoading: boolean
-  isRetrying: boolean
   onSelect: (transaction: Transaction) => void
-  onRetry: (transaction: Transaction) => void
   onSourceSelect: (source: string) => void
 }
 
@@ -17,11 +15,10 @@ const columns = [
   'Amount',
   'Type',
   'Source',
-  'Internal Status',
-  'Source Status',
+  'Status',
   'Value Date',
-  'Retry Count',
-  '',
+  'Created At',
+  'Updated At',
 ]
 
 function formatAmount(transaction: Transaction) {
@@ -43,19 +40,11 @@ function formatDate(value: string | null) {
 }
 
 function dotClass(status: Transaction['internalStatus']) {
-  if (status === 'NEW') {
-    return 'bg-[#0ea5e9]'
-  }
-
-  if (status === 'SENT') {
+  if (status === 'completed') {
     return 'bg-[#08b86f]'
   }
 
-  if (status === 'REJECTED') {
-    return 'bg-[#ff2644]'
-  }
-
-  return 'bg-[#6847f5]'
+  return 'bg-[#ff8a00]'
 }
 
 function LoadingRows() {
@@ -77,9 +66,7 @@ function LoadingRows() {
 export function TransactionTable({
   transactions,
   isLoading,
-  isRetrying,
   onSelect,
-  onRetry,
   onSourceSelect,
 }: TransactionTableProps) {
   return (
@@ -137,45 +124,14 @@ export function TransactionTable({
                 <td className="px-7">
                   <StatusBadge status={transaction.internalStatus} />
                 </td>
-                <td className="truncate px-7 font-medium text-[#2d3b68]">
-                  {transaction.sourceStatus ?? '-'}
-                </td>
                 <td className="px-7 font-medium text-[#2d3b68]">
                   <span className="inline-flex items-center gap-2">
                     <CalendarDays className="h-4 w-4 text-[#7380a7]" aria-hidden="true" />
                     {formatDate(transaction.valueDate)}
                   </span>
                 </td>
-                <td className="px-7 font-medium text-[#2d3b68]">{transaction.retryCount}</td>
-                <td className="px-7">
-                  <div className="flex items-center gap-2">
-                    {transaction.internalStatus === 'REJECTED' ? (
-                      <button
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:opacity-60"
-                        type="button"
-                        aria-label={`Retry ${transaction.transactionId}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onRetry(transaction)
-                        }}
-                        disabled={isRetrying}
-                      >
-                        <RotateCw className={`h-4 w-4 ${isRetrying ? 'animate-spin' : ''}`} aria-hidden="true" />
-                      </button>
-                    ) : null}
-                    <button
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff]"
-                      type="button"
-                      aria-label={`Open ${transaction.transactionId}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onSelect(transaction)
-                      }}
-                    >
-                      <MoreVertical className="h-5 w-5" aria-hidden="true" />
-                    </button>
-                  </div>
-                </td>
+                <td className="px-7 font-medium text-[#2d3b68]">{formatDate(transaction.createdAt)}</td>
+                <td className="px-7 font-medium text-[#2d3b68]">{formatDate(transaction.updatedAt)}</td>
               </tr>
             ))
           )}

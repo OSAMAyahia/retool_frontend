@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock3, Inbox, Send, WalletCards } from 'lucide-react'
+import { CheckCircle2, Clock3, ListChecks, WalletCards } from 'lucide-react'
 import type { TransactionSummary } from '../types/transaction'
 
 const cards = [
@@ -12,17 +12,8 @@ const cards = [
     accent: 'text-[#6847f5]',
   },
   {
-    key: 'new',
-    label: 'New',
-    caption: 'of total',
-    icon: Inbox,
-    frame: 'border-[#bae6fd] shadow-[0_12px_30px_rgba(14,165,233,0.08)]',
-    iconClass: 'bg-[#e0f2fe] text-[#0284c7]',
-    accent: 'text-[#0284c7]',
-  },
-  {
-    key: 'pending',
-    label: 'Pending',
+    key: 'unCompleted',
+    label: 'Un-completed',
     caption: 'of total',
     icon: Clock3,
     frame: 'border-[#ffdcb8] shadow-[0_12px_30px_rgba(255,138,0,0.08)]',
@@ -30,22 +21,22 @@ const cards = [
     accent: 'text-[#ff8a00]',
   },
   {
-    key: 'sent',
-    label: 'Sent',
+    key: 'completed',
+    label: 'Completed',
     caption: 'of total',
-    icon: Send,
+    icon: CheckCircle2,
     frame: 'border-[#bfead9] shadow-[0_12px_30px_rgba(8,184,111,0.08)]',
     iconClass: 'bg-[#d9f6e8] text-[#08b86f]',
     accent: 'text-[#08b86f]',
   },
   {
-    key: 'rejected',
-    label: 'rejected',
-    caption: 'of total',
-    icon: AlertTriangle,
-    frame: 'border-[#ffd1d9] shadow-[0_12px_30px_rgba(255,38,68,0.08)]',
-    iconClass: 'bg-[#ffe1e6] text-[#ff2644]',
-    accent: 'text-[#ff2644]',
+    key: 'journalRows',
+    label: 'Journal Rows',
+    caption: 'processed',
+    icon: ListChecks,
+    frame: 'border-[#bdd4ff] shadow-[0_12px_30px_rgba(31,102,255,0.08)]',
+    iconClass: 'bg-[#eaf2ff] text-[#1f66ff]',
+    accent: 'text-[#1f66ff]',
   },
 ] as const
 
@@ -59,12 +50,16 @@ function percent(value: number, total: number) {
 
 export function SummaryCards({ summary }: { summary: TransactionSummary }) {
   return (
-    <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
+    <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map((card) => {
         const Icon = card.icon
         const value = summary[card.key]
         const caption =
-          card.key === 'total' ? card.caption : `${percent(value, summary.total)} ${card.caption}`
+          card.key === 'total'
+            ? card.caption
+            : card.key === 'journalRows'
+              ? card.caption
+              : `${percent(value, summary.total)} ${card.caption}`
 
         return (
           <article
