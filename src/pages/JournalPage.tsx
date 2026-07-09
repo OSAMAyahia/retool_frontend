@@ -175,44 +175,44 @@ export function JournalPage() {
   return (
     <main className="min-h-screen bg-[#f6f8fc] px-4 py-4 text-[#172452] sm:px-6">
       <section className="mx-auto min-h-[calc(100vh-2rem)] w-full max-w-[1840px] rounded-2xl border border-[#dfe6f4] bg-white/80 px-5 py-7 shadow-[0_18px_50px_rgba(35,48,85,0.08)] sm:px-8 lg:px-12">
-        <header className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <header className="mb-8 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-normal text-[#111b45] lg:text-[34px]">
+            <h1 className="text-3xl font-extrabold tracking-normal text-[#111b45] lg:text-[32px]">
               Journal Table
             </h1>
-            <p className="mt-2 text-base font-medium text-[#617096]">
+            <p className="mt-2 max-w-2xl text-sm font-medium text-[#617096]">
               Processed journal rows with the original processing statuses
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex h-14 min-w-[212px] items-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
-              <RotateCw className="h-5 w-5 text-[#5748f5]" aria-hidden="true" />
+          <div className="flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
+            <div className="flex h-11 min-w-[168px] items-center gap-2 rounded-lg border border-[#dfe6f4] bg-white/80 px-3 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
+              <RotateCw className="h-4 w-4 text-[#5748f5]" aria-hidden="true" />
               <span>
                 <span className="block text-xs font-semibold text-[#617096]">Last updated</span>
-                <strong className="block text-sm font-bold text-[#2d3866]">
+                <strong className="block whitespace-nowrap text-xs font-bold text-[#2d3866]">
                   {lastUpdated ? lastUpdated.toLocaleTimeString() : 'Loading data'}
                 </strong>
               </span>
             </div>
             <Link
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#dfe6f4] bg-white/80 px-4 text-xs font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
               to="/"
             >
-              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to Dashboard
             </Link>
             <button
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-6 text-sm font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-4 text-xs font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
               onClick={() => void handleSendToOdoo()}
               disabled={isActionLoading}
             >
-              <Send className="h-5 w-5" aria-hidden="true" />
+              <Send className="h-4 w-4" aria-hidden="true" />
               Send to Odoo
             </button>
             <button
-              className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
               onClick={() => void loadJournals()}
               disabled={isLoading}
@@ -222,20 +222,20 @@ export function JournalPage() {
             </button>
             {user?.role === 'ADMIN' ? (
               <Link
-                className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+                className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#dfe6f4] bg-white/80 px-3 text-xs font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
                 to="/admin"
               >
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
                 Admin
               </Link>
             ) : null}
             <button
-              className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
               type="button"
               onClick={handleLogout}
               aria-label="Logout"
             >
-              <LogOut className="h-5 w-5" aria-hidden="true" />
+              <LogOut className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         </header>
@@ -279,6 +279,7 @@ export function JournalPage() {
     </main>
   )
 }
+
 
 
 
