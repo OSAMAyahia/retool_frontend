@@ -1,4 +1,4 @@
-import { CalendarDays, Database } from 'lucide-react'
+import { CalendarDays, Database, Eye } from 'lucide-react'
 import type { Transaction } from '../types/transaction'
 import { StatusBadge } from './StatusBadge'
 
@@ -10,15 +10,16 @@ interface TransactionTableProps {
 }
 
 const columns = [
-  'Transaction ID',
-  'Account ID',
+  'Transaction',
+  'Account',
   'Amount',
   'Type',
   'Source',
   'Status',
   'Value Date',
-  'Created At',
-  'Updated At',
+  'Created',
+  'Updated',
+  '',
 ]
 
 function formatAmount(transaction: Transaction) {
@@ -28,32 +29,44 @@ function formatAmount(transaction: Transaction) {
   }).format(transaction.amount)
 }
 
-function formatDate(value: string | null) {
+function formatDateParts(value: string | null) {
   if (!value) {
-    return '-'
+    return { date: '-', time: '' }
   }
 
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+  const date = new Date(value)
+  return {
+    date: new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(date),
+    time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(date),
+  }
+}
+
+function DateCell({ value }: { value: string | null }) {
+  const parts = formatDateParts(value)
+
+  return (
+    <span className="inline-flex min-w-[118px] flex-col leading-tight">
+      <span className="whitespace-nowrap font-bold text-[#24315f]">{parts.date}</span>
+      {parts.time ? <span className="mt-1 whitespace-nowrap text-xs font-semibold text-[#7a86a6]">{parts.time}</span> : null}
+    </span>
+  )
 }
 
 function dotClass(status: Transaction['internalStatus']) {
   if (status === 'completed') {
-    return 'bg-[#08b86f]'
+    return 'bg-[#08b86f] shadow-[0_0_0_4px_rgba(8,184,111,0.12)]'
   }
 
-  return 'bg-[#ff8a00]'
+  return 'bg-[#ff8a00] shadow-[0_0_0_4px_rgba(255,138,0,0.14)]'
 }
 
 function LoadingRows() {
   return (
     <>
-      {Array.from({ length: 5 }).map((_, rowIndex) => (
-        <tr key={rowIndex}>
+      {Array.from({ length: 6 }).map((_, rowIndex) => (
+        <tr key={rowIndex} className="border-b border-[#edf1f8]">
           {columns.map((column, columnIndex) => (
-            <td key={`${column}-${columnIndex}`} className="h-[58px] px-7">
+            <td key={`${column}-${columnIndex}`} className="h-[64px] px-5">
               <div className="h-4 w-full max-w-28 animate-pulse rounded bg-[#eef3fb]" />
             </td>
           ))}
@@ -70,23 +83,35 @@ export function TransactionTable({
   onSourceSelect,
 }: TransactionTableProps) {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-[1280px] table-fixed text-left text-sm">
-        <thead className="bg-[#f8fbff]/90 text-[#627194]">
+    <div className="max-h-[680px] overflow-auto bg-white">
+      <table className="min-w-[1460px] border-separate border-spacing-0 text-left text-sm">
+        <colgroup>
+          <col className="w-[230px]" />
+          <col className="w-[170px]" />
+          <col className="w-[150px]" />
+          <col className="w-[120px]" />
+          <col className="w-[170px]" />
+          <col className="w-[140px]" />
+          <col className="w-[150px]" />
+          <col className="w-[150px]" />
+          <col className="w-[150px]" />
+          <col className="w-[90px]" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
             {columns.map((column, index) => (
-              <th key={`${column}-${index}`} className="h-14 px-7 font-bold">
+              <th key={`${column}-${index}`} className="h-12 whitespace-nowrap px-5 text-xs font-extrabold uppercase tracking-[0.04em]">
                 {column}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#dfe6f4]">
+        <tbody>
           {isLoading ? (
             <LoadingRows />
           ) : transactions.length === 0 ? (
             <tr>
-              <td className="px-7 py-12 text-center text-sm font-medium text-[#657295]" colSpan={columns.length}>
+              <td className="px-5 py-14 text-center text-sm font-semibold text-[#657295]" colSpan={columns.length}>
                 No transactions match the current filters.
               </td>
             </tr>
@@ -94,23 +119,39 @@ export function TransactionTable({
             transactions.map((transaction) => (
               <tr
                 key={transaction.transactionId}
-                className="cursor-pointer bg-white/70 transition hover:bg-[#f8fbff]"
+                className="group cursor-pointer border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]"
                 onClick={() => onSelect(transaction)}
               >
-                <td className="h-[58px] truncate px-7 font-extrabold text-[#15214b]">
-                  <span className="inline-flex items-center gap-3">
-                    <span className={`h-2.5 w-2.5 rounded-full ${dotClass(transaction.internalStatus)}`} />
-                    {transaction.transactionId}
+                <td className="h-[64px] px-5 align-middle">
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotClass(transaction.internalStatus)}`} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-mono text-[13px] font-extrabold text-[#15214b]">
+                        {transaction.transactionId}
+                      </span>
+                      <span className="mt-1 block whitespace-nowrap text-xs font-bold text-[#7a86a6]">
+                        Retry {transaction.retryCount}
+                      </span>
+                    </span>
                   </span>
                 </td>
-                <td className="truncate px-7 font-medium text-[#2d3b68]">{transaction.accountId}</td>
-                <td className="px-7 font-medium text-[#2d3b68]">
-                  {formatAmount(transaction)} {transaction.currency}
+                <td className="px-5 align-middle">
+                  <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">{transaction.accountId}</span>
                 </td>
-                <td className="px-7 font-medium capitalize text-[#2d3b68]">{transaction.type}</td>
-                <td className="px-7 font-medium text-[#2d3b68]">
+                <td className="px-5 text-right align-middle">
+                  <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
+                    {formatAmount(transaction)}
+                  </span>
+                  <span className="block whitespace-nowrap text-xs font-bold text-[#7a86a6]">{transaction.currency}</span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="inline-flex max-w-[104px] truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold capitalize text-[#33406f]">
+                    {transaction.type}
+                  </span>
+                </td>
+                <td className="px-5 align-middle">
                   <button
-                    className="inline-flex max-w-full items-center gap-2 truncate rounded-lg px-2 py-1 text-left transition hover:bg-[#eef4ff] hover:text-[#2563eb]"
+                    className="inline-flex max-w-[150px] items-center gap-2 truncate whitespace-nowrap rounded-lg px-2 py-1 text-left font-bold text-[#2d3b68] transition hover:bg-[#eef4ff] hover:text-[#2563eb]"
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation()
@@ -121,17 +162,30 @@ export function TransactionTable({
                     <span className="truncate">{transaction.source}</span>
                   </button>
                 </td>
-                <td className="px-7">
+                <td className="px-5 align-middle">
                   <StatusBadge status={transaction.internalStatus} />
                 </td>
-                <td className="px-7 font-medium text-[#2d3b68]">
-                  <span className="inline-flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4 text-[#7380a7]" aria-hidden="true" />
-                    {formatDate(transaction.valueDate)}
+                <td className="px-5 align-middle">
+                  <span className="inline-flex items-start gap-2">
+                    <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#7380a7]" aria-hidden="true" />
+                    <DateCell value={transaction.valueDate} />
                   </span>
                 </td>
-                <td className="px-7 font-medium text-[#2d3b68]">{formatDate(transaction.createdAt)}</td>
-                <td className="px-7 font-medium text-[#2d3b68]">{formatDate(transaction.updatedAt)}</td>
+                <td className="px-5 align-middle"><DateCell value={transaction.createdAt} /></td>
+                <td className="px-5 align-middle"><DateCell value={transaction.updatedAt} /></td>
+                <td className="px-5 text-right align-middle">
+                  <button
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white text-[#5748f5] shadow-sm transition group-hover:border-[#c9d4eb] group-hover:bg-[#eef4ff]"
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onSelect(transaction)
+                    }}
+                    aria-label="View transaction details"
+                  >
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </td>
               </tr>
             ))
           )}

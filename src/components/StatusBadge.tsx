@@ -21,9 +21,10 @@ function statusLabel(status: InternalStatus) {
 export function StatusBadge({ status }: { status: InternalStatus }) {
   return (
     <span
-      className={`inline-flex h-7 min-w-[74px] items-center justify-center rounded-full border px-3 text-xs font-extrabold ${statusStyles[status] ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}
+      className={`inline-flex h-7 min-w-[92px] items-center justify-center whitespace-nowrap rounded-full border px-3 text-xs font-extrabold ${statusStyles[status] ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}
     >
       {statusLabel(status)}
     </span>
   )
 }
+
