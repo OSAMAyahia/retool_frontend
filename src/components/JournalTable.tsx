@@ -48,7 +48,7 @@ function MoneyCell({ value, tone }: { value: number | null; tone: 'debit' | 'cre
   const color = tone === 'debit' ? 'text-[#b45309]' : 'text-[#047857]'
 
   return (
-    <span className={`block whitespace-nowrap text-right font-extrabold tabular-nums ${value == null ? 'text-[#9aa4bd]' : color}`}>
+    <span className={`block whitespace-nowrap text-left font-extrabold tabular-nums ${value == null ? 'text-[#9aa4bd]' : color}`}>
       {formatMoney(value)}
     </span>
   )
@@ -143,3 +143,4 @@ export function JournalTable({ journals, isLoading, onSelect }: JournalTableProp
     </div>
   )
 }
+
