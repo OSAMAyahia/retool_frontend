@@ -36,6 +36,26 @@ export interface Journal {
   rawPayload?: unknown
 }
 
+
+export interface IngestTransactionPayload {
+  transactionId: string
+  accountId: string
+  amount: number
+  currency: string
+  type: string
+  status?: string | null
+  source?: string
+  description?: string | null
+  valueDate?: string | null
+  Date?: string | null
+  Journal?: string | null
+  Reference?: string | null
+  'Journal Items/label'?: string | null
+  'Journal Items/Account'?: string | null
+  'Journal Items/Debit'?: number | null
+  'Journal Items/Credit'?: number | null
+  'Journal Items/Analytic'?: string | null
+}
 export interface ProcessingResponse {
   processed: number
   processedAt: string
@@ -83,3 +103,4 @@ export interface TransactionStatus {
   createdAt: string
   updatedAt: string
 }
+

@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { ExcelImportModal } from '../components/ExcelImportModal'
 import { FilterBar } from '../components/FilterBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
@@ -23,11 +24,12 @@ import {
   getSources,
   getTransactionById,
   getTransactions,
-  importTransactionsExcel,
+  ingestTransactions,
   processJournals,
   retryTransaction,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
+import { parseExcelToTransactions } from '../utils/xlsxImport'
 import type {
   Journal,
   PageResponse,
@@ -35,6 +37,7 @@ import type {
   TransactionFilters,
   TransactionSummary,
   TransactionStatus,
+  IngestTransactionPayload,
 } from '../types/transaction'
 
 const initialTransactionsPage: PageResponse<Transaction> = {
@@ -154,6 +157,8 @@ export function Dashboard() {
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [importRows, setImportRows] = useState<IngestTransactionPayload[]>([])
+  const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
 
   const loadTransactions = useCallback(
     async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
@@ -290,14 +295,35 @@ export function Dashboard() {
     setActionError(null)
 
     try {
-      const result = await importTransactionsExcel(file)
+      const rows = await parseExcelToTransactions(file)
+      setImportRows(rows)
+      setIsImportPopupOpen(true)
+    } catch (importError) {
+      setActionError(`Import preview failed. ${getApiErrorMessage(importError)}`)
+    } finally {
+      setIsActionLoading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleSubmitImportRows = async () => {
+    setIsActionLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+
+    try {
+      const result = await ingestTransactions(importRows)
       const nextFilters: TransactionFilters = {}
       setFilters(nextFilters)
       setPage(0)
+      setIsImportPopupOpen(false)
+      setImportRows([])
 
       if (result.received === 0) {
         const itemMessages = result.items
-          .flatMap((item) => {
+          .flatMap((item: unknown) => {
             if (item && typeof item === 'object' && 'messages' in item) {
               const messages = (item as { messages?: unknown }).messages
               return Array.isArray(messages) ? messages.map(String) : []
@@ -311,21 +337,16 @@ export function Dashboard() {
             ? `Import did not add rows. ${itemMessages.join(' ')}`
             : 'Import did not add rows. The backend returned 0 imported rows, so nothing was added to the table.',
         )
-        await loadTransactions(false, nextFilters, 0)
-        await loadJournalCount()
-        return
+      } else {
+        setActionMessage(`Imported ${result.received} rows. Duplicates ${result.duplicates}. Failed ${result.failed}.`)
       }
 
-      setActionMessage(`Imported ${result.received} rows. Failed ${result.failed}.`)
       await loadTransactions(false, nextFilters, 0)
       await loadJournalCount()
     } catch (importError) {
       setActionError(`Import failed. ${getApiErrorMessage(importError)}`)
     } finally {
       setIsActionLoading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
     }
   }
 
@@ -555,6 +576,19 @@ export function Dashboard() {
         </div>
       </section>
 
+
+      {isImportPopupOpen ? (
+        <ExcelImportModal
+          rows={importRows}
+          isSubmitting={isActionLoading}
+          onRowsChange={setImportRows}
+          onClose={() => {
+            setIsImportPopupOpen(false)
+            setImportRows([])
+          }}
+          onSubmit={() => void handleSubmitImportRows()}
+        />
+      ) : null}
       <TransactionDetailPanel
         transaction={selectedTransaction}
         isRetrying={isRetrying}
@@ -566,4 +600,7 @@ export function Dashboard() {
     </main>
   )
 }
+
+
+
 

@@ -1,6 +1,7 @@
 import axios, { AxiosHeaders } from 'axios'
 import type {
   IngestSummaryResponse,
+  IngestTransactionPayload,
   Journal,
   PageResponse,
   ProcessingResponse,
@@ -198,11 +199,10 @@ export async function getTransactions(
   return normalizeTransactionPage(response.data)
 }
 
-export async function importTransactionsExcel(file: File): Promise<IngestSummaryResponse> {
-  const formData = new FormData()
-  formData.append('file', file)
-
-  const response = await api.post<IngestSummaryResponse>('/transactions/import-excel', formData)
+export async function ingestTransactions(
+  rows: IngestTransactionPayload[],
+): Promise<IngestSummaryResponse> {
+  const response = await api.post<IngestSummaryResponse>('/transactions/ingest', rows)
   return response.data
 }
 
@@ -308,6 +308,7 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
+
 
 
 
