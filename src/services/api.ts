@@ -12,7 +12,7 @@ import type {
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1',
-  timeout: 30000,
+  timeout: 120000,
 })
 
 export const AUTH_TOKEN_STORAGE_KEY = 'retool_odoo_auth_token'
@@ -201,9 +201,32 @@ export async function getTransactions(
 
 export async function ingestTransactions(
   rows: IngestTransactionPayload[],
+  onProgress?: (sent: number, total: number) => void,
 ): Promise<IngestSummaryResponse> {
-  const response = await api.post<IngestSummaryResponse>('/transactions/ingest', rows)
-  return response.data
+  const batchSize = 100
+  const summary: IngestSummaryResponse = {
+    received: 0,
+    duplicates: 0,
+    failed: 0,
+    processedAt: new Date().toISOString(),
+    items: [],
+  }
+
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const batch = rows.slice(start, start + batchSize)
+    const response = await api.post<IngestSummaryResponse>('/transactions/ingest', batch, {
+      timeout: 120000,
+    })
+
+    summary.received += response.data.received ?? 0
+    summary.duplicates += response.data.duplicates ?? 0
+    summary.failed += response.data.failed ?? 0
+    summary.processedAt = response.data.processedAt ?? summary.processedAt
+    summary.items.push(...(response.data.items ?? []))
+    onProgress?.(Math.min(start + batch.length, rows.length), rows.length)
+  }
+
+  return summary
 }
 
 export async function processJournals(): Promise<ProcessingResponse> {
@@ -308,6 +331,7 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
+
 
 
 

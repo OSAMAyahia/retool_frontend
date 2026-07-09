@@ -314,7 +314,10 @@ export function Dashboard() {
     setActionError(null)
 
     try {
-      const result = await ingestTransactions(importRows)
+            setActionMessage(`Sending 0 of ${importRows.length} rows...`)
+      const result = await ingestTransactions(importRows, (sent, total) => {
+        setActionMessage(`Sending ${sent} of ${total} rows...`)
+      })
       const nextFilters: TransactionFilters = {}
       setFilters(nextFilters)
       setPage(0)
@@ -600,6 +603,7 @@ export function Dashboard() {
     </main>
   )
 }
+
 
 
 
