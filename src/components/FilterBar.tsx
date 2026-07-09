@@ -5,11 +5,14 @@ interface FilterBarProps {
   filters: TransactionFilters
   statuses: TransactionStatus[]
   sources: string[]
-  autoRefresh: boolean
+  autoRefresh?: boolean
   isLoading: boolean
+  sourceLabel?: string
+  accountLabel?: string
+  accountPlaceholder?: string
   onFiltersChange: (filters: TransactionFilters) => void
   onRefresh: () => void
-  onAutoRefreshChange: (enabled: boolean) => void
+  onAutoRefreshChange?: (enabled: boolean) => void
   onReset: () => void
 }
 
@@ -21,6 +24,9 @@ export function FilterBar({
   statuses,
   sources,
   isLoading,
+  sourceLabel = 'Source',
+  accountLabel = 'Account ID',
+  accountPlaceholder = 'Search account ID...',
   onFiltersChange,
   onRefresh,
   onReset,
@@ -50,7 +56,7 @@ export function FilterBar({
         </label>
 
         <label className="flex flex-col gap-3 text-sm font-bold text-[#18234f]">
-          Source
+          {sourceLabel}
           <select
             className={inputClass}
             value={filters.source ?? ''}
@@ -61,7 +67,7 @@ export function FilterBar({
               })
             }
           >
-            <option value="">All Sources</option>
+            <option value="">All {sourceLabel}s</option>
             {sources.map((source) => (
               <option key={source} value={source}>
                 {source}
@@ -71,12 +77,12 @@ export function FilterBar({
         </label>
 
         <label className="flex flex-col gap-3 text-sm font-bold text-[#18234f]">
-          Account ID
+          {accountLabel}
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-4 h-5 w-5 text-[#7380a7]" />
             <input
               className={`${inputClass} pl-12`}
-              placeholder="Search account ID..."
+              placeholder={accountPlaceholder}
               value={filters.accountId ?? ''}
               onChange={(event) =>
                 onFiltersChange({

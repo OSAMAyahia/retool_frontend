@@ -103,6 +103,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+function toDateTimeFrom(value?: string) {
+  return value ? `${value}T00:00:00Z` : undefined
+}
+
+function toDateTimeTo(value?: string) {
+  return value ? `${value}T23:59:59Z` : undefined
+}
 function normalizeStatus(status: string) {
   if (status === 'FAILED') {
     return 'REJECTED'
@@ -183,8 +190,8 @@ export async function getTransactions(
       internalStatus: filters.internalStatus || undefined,
       source: filters.source || undefined,
       accountId: filters.accountId || undefined,
-      dateFrom: filters.dateFrom || undefined,
-      dateTo: filters.dateTo || undefined,
+      dateFrom: toDateTimeFrom(filters.dateFrom),
+      dateTo: toDateTimeTo(filters.dateTo),
     },
   })
 
@@ -204,9 +211,21 @@ export async function processJournals(): Promise<ProcessingResponse> {
   return response.data
 }
 
-export async function getJournals(page: number, size: number): Promise<PageResponse<Journal>> {
+export async function getJournals(
+  filters: TransactionFilters,
+  page: number,
+  size: number,
+): Promise<PageResponse<Journal>> {
   const response = await api.get<BackendPage<Journal> | Journal[]>('/journals', {
-    params: { page, size },
+    params: {
+      page,
+      size,
+      status: filters.internalStatus || undefined,
+      journal: filters.source || undefined,
+      account: filters.accountId || undefined,
+      dateFrom: toDateTimeFrom(filters.dateFrom),
+      dateTo: toDateTimeTo(filters.dateTo),
+    },
   })
 
   return normalizeJournalPage(response.data)
@@ -289,3 +308,6 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
+
+
+
