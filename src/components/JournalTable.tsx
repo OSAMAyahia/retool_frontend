@@ -1,26 +1,14 @@
-import { BookOpen, CalendarDays, Hash, Send } from 'lucide-react'
+import { BookOpen, CalendarDays, Hash } from 'lucide-react'
 import type { Journal } from '../types/transaction'
 import { StatusBadge } from './StatusBadge'
 
 interface JournalTableProps {
   journals: Journal[]
   isLoading: boolean
+  onSelect: (journal: Journal) => void
 }
 
-const columns = [
-  'Date',
-  'Journal',
-  'Reference',
-  'Label',
-  'Account',
-  'Debit',
-  'Credit',
-  'Analytic',
-  'Status',
-  'Odoo Ref',
-  'Created',
-  'Updated',
-]
+const columns = ['Date', 'Journal', 'Reference', 'Account', 'Debit', 'Credit', 'Status']
 
 function formatDateParts(value: string | null) {
   if (!value) {
@@ -38,7 +26,7 @@ function DateCell({ value }: { value: string | null }) {
   const parts = formatDateParts(value)
 
   return (
-    <span className="inline-flex min-w-[118px] flex-col leading-tight">
+    <span className="inline-flex min-w-[112px] flex-col leading-tight">
       <span className="whitespace-nowrap font-bold text-[#24315f]">{parts.date}</span>
       {parts.time ? <span className="mt-1 whitespace-nowrap text-xs font-semibold text-[#7a86a6]">{parts.time}</span> : null}
     </span>
@@ -82,23 +70,18 @@ function LoadingRows() {
   )
 }
 
-export function JournalTable({ journals, isLoading }: JournalTableProps) {
+export function JournalTable({ journals, isLoading, onSelect }: JournalTableProps) {
   return (
-    <div className="max-h-[720px] overflow-auto bg-white">
-      <table className="min-w-[1840px] border-separate border-spacing-0 text-left text-sm">
+    <div className="max-h-[720px] overflow-y-auto bg-white">
+      <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[150px]" />
-          <col className="w-[170px]" />
-          <col className="w-[190px]" />
-          <col className="w-[260px]" />
-          <col className="w-[240px]" />
-          <col className="w-[130px]" />
-          <col className="w-[130px]" />
-          <col className="w-[190px]" />
-          <col className="w-[130px]" />
-          <col className="w-[150px]" />
-          <col className="w-[150px]" />
-          <col className="w-[150px]" />
+          <col className="w-[14%]" />
+          <col className="w-[16%]" />
+          <col className="w-[18%]" />
+          <col className="w-[22%]" />
+          <col className="w-[10%]" />
+          <col className="w-[10%]" />
+          <col className="w-[10%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
@@ -120,7 +103,11 @@ export function JournalTable({ journals, isLoading }: JournalTableProps) {
             </tr>
           ) : (
             journals.map((journal, index) => (
-              <tr key={`${journal.transactionId}-${index}`} className="border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]">
+              <tr
+                key={`${journal.transactionId}-${index}`}
+                className="cursor-pointer border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]"
+                onClick={() => onSelect(journal)}
+              >
                 <td className="h-[64px] px-5 align-middle">
                   <span className="inline-flex items-start gap-2">
                     <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#7380a7]" aria-hidden="true" />
@@ -128,7 +115,7 @@ export function JournalTable({ journals, isLoading }: JournalTableProps) {
                   </span>
                 </td>
                 <td className="px-5 align-middle">
-                  <span className="inline-flex max-w-[150px] items-center gap-2 rounded-lg bg-[#eef6ff] px-2.5 py-1 font-extrabold text-[#1f66ff]">
+                  <span className="inline-flex max-w-full items-center gap-2 rounded-lg bg-[#eef6ff] px-2.5 py-1 font-extrabold text-[#1f66ff]">
                     <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span className="truncate">{journal.journal ?? '-'}</span>
                   </span>
@@ -140,34 +127,14 @@ export function JournalTable({ journals, isLoading }: JournalTableProps) {
                   </span>
                 </td>
                 <td className="px-5 align-middle">
-                  <span className="block truncate font-bold text-[#172452]" title={journal.itemLabel ?? undefined}>
-                    {journal.itemLabel ?? '-'}
-                  </span>
-                  <span className="mt-1 block truncate font-mono text-xs font-bold text-[#7a86a6]">
-                    {journal.transactionId}
-                  </span>
-                </td>
-                <td className="px-5 align-middle">
                   <span className="block truncate font-bold text-[#2d3b68]" title={journal.itemAccount ?? undefined}>
                     {journal.itemAccount ?? '-'}
                   </span>
+                  <span className="mt-1 block truncate text-xs font-bold text-[#7a86a6]">Click row for details</span>
                 </td>
                 <td className="px-5 align-middle"><MoneyCell value={journal.debit} tone="debit" /></td>
                 <td className="px-5 align-middle"><MoneyCell value={journal.credit} tone="credit" /></td>
-                <td className="px-5 align-middle">
-                  <span className="block truncate font-bold text-[#2d3b68]" title={journal.analytic ?? undefined}>
-                    {journal.analytic ?? '-'}
-                  </span>
-                </td>
                 <td className="px-5 align-middle"><StatusBadge status={journal.status} /></td>
-                <td className="px-5 align-middle">
-                  <span className="inline-flex max-w-[128px] items-center gap-2 truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 font-mono text-xs font-extrabold text-[#33406f]">
-                    <Send className="h-3.5 w-3.5 shrink-0 text-[#7380a7]" aria-hidden="true" />
-                    <span className="truncate">{journal.odooReferenceId ?? '-'}</span>
-                  </span>
-                </td>
-                <td className="px-5 align-middle"><DateCell value={journal.createdAt} /></td>
-                <td className="px-5 align-middle"><DateCell value={journal.updatedAt} /></td>
               </tr>
             ))
           )}

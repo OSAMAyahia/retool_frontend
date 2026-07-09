@@ -1,4 +1,4 @@
-import { CalendarDays, Database, Eye } from 'lucide-react'
+import { CalendarDays, Database } from 'lucide-react'
 import type { Transaction } from '../types/transaction'
 import { StatusBadge } from './StatusBadge'
 
@@ -9,18 +9,7 @@ interface TransactionTableProps {
   onSourceSelect: (source: string) => void
 }
 
-const columns = [
-  'Transaction',
-  'Account',
-  'Amount',
-  'Type',
-  'Source',
-  'Status',
-  'Value Date',
-  'Created',
-  'Updated',
-  '',
-]
+const columns = ['Transaction', 'Account', 'Amount', 'Type', 'Source', 'Status', 'Value Date']
 
 function formatAmount(transaction: Transaction) {
   return new Intl.NumberFormat('en-US', {
@@ -45,7 +34,7 @@ function DateCell({ value }: { value: string | null }) {
   const parts = formatDateParts(value)
 
   return (
-    <span className="inline-flex min-w-[118px] flex-col leading-tight">
+    <span className="inline-flex min-w-[112px] flex-col leading-tight">
       <span className="whitespace-nowrap font-bold text-[#24315f]">{parts.date}</span>
       {parts.time ? <span className="mt-1 whitespace-nowrap text-xs font-semibold text-[#7a86a6]">{parts.time}</span> : null}
     </span>
@@ -83,19 +72,16 @@ export function TransactionTable({
   onSourceSelect,
 }: TransactionTableProps) {
   return (
-    <div className="max-h-[680px] overflow-auto bg-white">
-      <table className="min-w-[1460px] border-separate border-spacing-0 text-left text-sm">
+    <div className="max-h-[680px] overflow-y-auto bg-white">
+      <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[230px]" />
-          <col className="w-[170px]" />
-          <col className="w-[150px]" />
-          <col className="w-[120px]" />
-          <col className="w-[170px]" />
-          <col className="w-[140px]" />
-          <col className="w-[150px]" />
-          <col className="w-[150px]" />
-          <col className="w-[150px]" />
-          <col className="w-[90px]" />
+          <col className="w-[24%]" />
+          <col className="w-[16%]" />
+          <col className="w-[14%]" />
+          <col className="w-[11%]" />
+          <col className="w-[13%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
@@ -129,8 +115,8 @@ export function TransactionTable({
                       <span className="block truncate font-mono text-[13px] font-extrabold text-[#15214b]">
                         {transaction.transactionId}
                       </span>
-                      <span className="mt-1 block whitespace-nowrap text-xs font-bold text-[#7a86a6]">
-                        Retry {transaction.retryCount}
+                      <span className="mt-1 block truncate text-xs font-bold text-[#7a86a6]">
+                        Click row for details
                       </span>
                     </span>
                   </span>
@@ -145,13 +131,13 @@ export function TransactionTable({
                   <span className="block whitespace-nowrap text-xs font-bold text-[#7a86a6]">{transaction.currency}</span>
                 </td>
                 <td className="px-5 align-middle">
-                  <span className="inline-flex max-w-[104px] truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold capitalize text-[#33406f]">
+                  <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold capitalize text-[#33406f]">
                     {transaction.type}
                   </span>
                 </td>
                 <td className="px-5 align-middle">
                   <button
-                    className="inline-flex max-w-[150px] items-center gap-2 truncate whitespace-nowrap rounded-lg px-2 py-1 text-left font-bold text-[#2d3b68] transition hover:bg-[#eef4ff] hover:text-[#2563eb]"
+                    className="inline-flex max-w-full items-center gap-2 truncate whitespace-nowrap rounded-lg px-2 py-1 text-left font-bold text-[#2d3b68] transition hover:bg-[#eef4ff] hover:text-[#2563eb]"
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation()
@@ -170,21 +156,6 @@ export function TransactionTable({
                     <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#7380a7]" aria-hidden="true" />
                     <DateCell value={transaction.valueDate} />
                   </span>
-                </td>
-                <td className="px-5 align-middle"><DateCell value={transaction.createdAt} /></td>
-                <td className="px-5 align-middle"><DateCell value={transaction.updatedAt} /></td>
-                <td className="px-5 text-right align-middle">
-                  <button
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white text-[#5748f5] shadow-sm transition group-hover:border-[#c9d4eb] group-hover:bg-[#eef4ff]"
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onSelect(transaction)
-                    }}
-                    aria-label="View transaction details"
-                  >
-                    <Eye className="h-4 w-4" aria-hidden="true" />
-                  </button>
                 </td>
               </tr>
             ))

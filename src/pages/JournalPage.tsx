@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
+import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
 import { SummaryCards } from '../components/SummaryCards'
 import { getJournals, sendJournalsToOdoo } from '../services/api'
@@ -99,6 +100,7 @@ export function JournalPage() {
   const navigate = useNavigate()
   const [filters, setFilters] = useState<TransactionFilters>({})
   const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
+  const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -267,13 +269,16 @@ export function JournalPage() {
         </div>
 
         <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          <JournalTable journals={journalsPage.content} isLoading={isLoading} />
+          <JournalTable journals={journalsPage.content} isLoading={isLoading} onSelect={setSelectedJournal} />
           <div className="border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
             Showing {journalsPage.content.length} of {journalsPage.totalElements} journal rows
           </div>
         </div>
       </section>
+      <JournalDetailPanel journal={selectedJournal} onClose={() => setSelectedJournal(null)} />
     </main>
   )
 }
+
+
 
