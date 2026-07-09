@@ -4,8 +4,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
 import { JournalTable } from '../components/JournalTable'
+import { SummaryCards } from '../components/SummaryCards'
 import { getJournals, sendJournalsToOdoo } from '../services/api'
-import type { Journal, PageResponse, TransactionFilters, TransactionStatus } from '../types/transaction'
+import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
 
 const initialJournalsPage: PageResponse<Journal> = {
   content: [],
@@ -73,6 +74,18 @@ const journalStatuses: TransactionStatus[] = [
   },
 ]
 
+function buildJournalSummary(page: PageResponse<Journal>): TransactionSummary {
+  const sent = page.content.filter((journal) => journal.status === 'SENT').length
+  const unCompleted = Math.max(page.totalElements - sent, 0)
+
+  return {
+    total: page.totalElements,
+    completed: sent,
+    unCompleted,
+    journalRows: page.totalElements,
+  }
+}
+
 function getApiErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message
@@ -91,6 +104,8 @@ export function JournalPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const summary = useMemo(() => buildJournalSummary(journalsPage), [journalsPage])
 
   const journalOptions = useMemo(
     () => Array.from(new Set(journalsPage.content.map((journal) => journal.journal).filter(Boolean))) as string[],
@@ -223,6 +238,8 @@ export function JournalPage() {
           </div>
         </header>
 
+        <SummaryCards summary={summary} />
+
         {actionMessage ? (
           <div className="rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
             {actionMessage}
@@ -259,3 +276,4 @@ export function JournalPage() {
     </main>
   )
 }
+
