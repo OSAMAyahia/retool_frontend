@@ -52,6 +52,56 @@ function dateValue(row: ExcelRow) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
 }
 
+
+function isTransactionExportRow(row: ExcelRow) {
+  return 'Transaction ID' in row || 'Account ID' in row || 'Amount' in row || 'Value Date' in row
+}
+
+function transactionDateValue(row: ExcelRow, key: string) {
+  const value = row[key]
+  if (value == null || value === '') {
+    return null
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  if (typeof value === 'number') {
+    return excelSerialDate(value)
+  }
+
+  const parsed = new Date(String(value).trim())
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+function parseTransactionExportRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload {
+  const signedAmount = numberValue(row, 'Amount') ?? 0
+  const absoluteAmount = Math.abs(signedAmount)
+  const declaredType = text(row, 'Type')
+  const type = declaredType || (signedAmount < 0 ? 'Debit' : 'Credit')
+  const valueDate = transactionDateValue(row, 'Value Date')
+
+  return {
+    transactionId: text(row, 'Transaction ID') || `EXCEL-TXN-${rowIndex}`,
+    accountId: text(row, 'Account ID') || 'UNKNOWN',
+    amount: absoluteAmount,
+    currency: 'SAR',
+    type,
+    status: text(row, 'Status') || 'IMPORTED',
+    source: text(row, 'Source') || 'Excel',
+    description: text(row, 'Transaction ID') || 'Imported transaction',
+    valueDate,
+    Date: valueDate,
+    Journal: text(row, 'Source') || 'Imported Transactions',
+    Reference: text(row, 'Transaction ID') || `EXCEL-TXN-${rowIndex}`,
+    'Journal Items/label': text(row, 'Transaction ID') || 'Imported transaction',
+    'Journal Items/Account': text(row, 'Account ID') || 'UNKNOWN',
+    'Journal Items/Debit': type.toLowerCase() === 'debit' ? absoluteAmount : null,
+    'Journal Items/Credit': type.toLowerCase() === 'credit' ? absoluteAmount : null,
+    'Journal Items/Analytic': null,
+  }
+}
 function buildTransactionId(row: ExcelRow, rowIndex: number) {
   const reference = text(row, 'Reference') || 'EXCEL'
   const label = text(row, 'Journal Items/label') || 'ROW'
@@ -77,6 +127,10 @@ export async function parseExcelToTransactions(file: File): Promise<IngestTransa
     const hasAnyValue = Object.values(row).some((value) => value != null && value !== '')
     if (!hasAnyValue) {
       return []
+    }
+
+    if (isTransactionExportRow(row)) {
+      return [parseTransactionExportRow(row, index + 1)]
     }
 
     const debit = numberValue(row, 'Journal Items/Debit')
@@ -108,3 +162,4 @@ export async function parseExcelToTransactions(file: File): Promise<IngestTransa
     }]
   })
 }
+

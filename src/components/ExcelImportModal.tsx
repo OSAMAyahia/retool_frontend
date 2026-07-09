@@ -12,6 +12,11 @@ interface ExcelImportModalProps {
 
 const columns = [
   { key: 'transactionId', label: 'Transaction ID', type: 'text' },
+  { key: 'accountId', label: 'Account ID', type: 'text' },
+  { key: 'amount', label: 'Amount', type: 'number' },
+  { key: 'source', label: 'Source', type: 'text' },
+  { key: 'status', label: 'Status', type: 'text' },
+  { key: 'valueDate', label: 'Value Date', type: 'datetime-local' },
   { key: 'Date', label: 'Date', type: 'datetime-local' },
   { key: 'Journal', label: 'Journal', type: 'text' },
   { key: 'Reference', label: 'Reference', type: 'text' },
@@ -40,11 +45,11 @@ function toInputDate(value?: string | null) {
 }
 
 function fromInputValue(key: ColumnKey, value: string) {
-  if (key === 'Date') {
+  if (key === 'Date' || key === 'valueDate') {
     return value ? new Date(value).toISOString() : null
   }
 
-  if (key === 'Journal Items/Debit' || key === 'Journal Items/Credit') {
+  if (key === 'Journal Items/Debit' || key === 'Journal Items/Credit' || key === 'amount') {
     return value === '' ? null : Number(value)
   }
 
@@ -53,7 +58,7 @@ function fromInputValue(key: ColumnKey, value: string) {
 
 function inputValue(row: IngestTransactionPayload, key: ColumnKey) {
   const value = row[key]
-  if (key === 'Date') {
+  if (key === 'Date' || key === 'valueDate') {
     return toInputDate(value as string | null)
   }
 
@@ -90,14 +95,14 @@ export function ExcelImportModal({
         nextRow.description = String(nextValue || 'Imported journal item')
       }
 
-      if (key === 'Journal Items/Debit' || key === 'Journal Items/Credit') {
+      if (key === 'Journal Items/Debit' || key === 'Journal Items/Credit' || key === 'amount') {
         const debit = Number(nextRow['Journal Items/Debit'] || 0)
         const credit = Number(nextRow['Journal Items/Credit'] || 0)
         nextRow.amount = debit > 0 ? debit : credit
         nextRow.type = debit > 0 ? 'Debit' : 'Credit'
       }
 
-      if (key === 'Date') {
+      if (key === 'Date' || key === 'valueDate') {
         nextRow.valueDate = typeof nextValue === 'string' ? nextValue : null
       }
 
@@ -213,3 +218,4 @@ export function ExcelImportModal({
     </div>
   )
 }
+
