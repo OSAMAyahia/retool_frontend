@@ -294,6 +294,28 @@ export function Dashboard() {
       const nextFilters: TransactionFilters = {}
       setFilters(nextFilters)
       setPage(0)
+
+      if (result.received === 0) {
+        const itemMessages = result.items
+          .flatMap((item) => {
+            if (item && typeof item === 'object' && 'messages' in item) {
+              const messages = (item as { messages?: unknown }).messages
+              return Array.isArray(messages) ? messages.map(String) : []
+            }
+            return []
+          })
+          .filter(Boolean)
+
+        setActionError(
+          itemMessages.length
+            ? `Import did not add rows. ${itemMessages.join(' ')}`
+            : 'Import did not add rows. The backend returned 0 imported rows, so nothing was added to the table.',
+        )
+        await loadTransactions(false, nextFilters, 0)
+        await loadJournalCount()
+        return
+      }
+
       setActionMessage(`Imported ${result.received} rows. Failed ${result.failed}.`)
       await loadTransactions(false, nextFilters, 0)
       await loadJournalCount()
@@ -544,3 +566,4 @@ export function Dashboard() {
     </main>
   )
 }
+
