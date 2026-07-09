@@ -88,7 +88,7 @@ export function TransactionTable({
             {columns.map((column, index) => (
               <th
                 key={`${column}-${index}`}
-                className={`h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em] ${column === 'Amount' ? 'text-right' : 'text-left'}`}
+                className={`h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em] text-left`}
               >
                 {column}
               </th>
@@ -127,7 +127,7 @@ export function TransactionTable({
                 <td className="px-3 align-middle">
                   <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">{transaction.accountId}</span>
                 </td>
-                <td className="px-3 text-right align-middle">
+                <td className="px-3 text-left align-middle">
                   <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
                     {formatAmount(transaction)} <span className="text-xs font-bold text-[#7a86a6]">{transaction.currency}</span>
                   </span>
@@ -167,5 +167,7 @@ export function TransactionTable({
     </div>
   )
 }
+
+
 
 
