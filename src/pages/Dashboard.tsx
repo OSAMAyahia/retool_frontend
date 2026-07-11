@@ -100,7 +100,9 @@ function buildSummary(page: PageResponse<Transaction>, journalRows: number): Tra
   )
 }
 
-function exportTransactionsExcel(transactions: Transaction[]) {
+type ExportFormat = 'excel' | 'csv'
+
+function exportTransactionsFile(transactions: Transaction[], format: ExportFormat) {
   const headers = [
     'Transaction ID',
     'Account ID',
@@ -128,10 +130,13 @@ function exportTransactionsExcel(transactions: Transaction[]) {
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
     .join('\n')
-  const url = URL.createObjectURL(new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8' }))
+  const isExcel = format === 'excel'
+  const url = URL.createObjectURL(new Blob([csv], {
+    type: isExcel ? 'application/vnd.ms-excel;charset=utf-8' : 'text/csv;charset=utf-8',
+  }))
   const link = document.createElement('a')
   link.href = url
-  link.download = 'transactions-dashboard-export.xls'
+  link.download = isExcel ? 'transactions-dashboard-export.xls' : 'transactions-dashboard-export.csv'
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -161,6 +166,7 @@ export function Dashboard() {
   const [importRows, setImportRows] = useState<IngestTransactionPayload[]>([])
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
 
   const loadTransactions = useCallback(
     async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
@@ -550,14 +556,42 @@ export function Dashboard() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-extrabold text-[#111b45]">Transactions Dashboard Table</h2>
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#dfe6f4] bg-white px-5 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
-                type="button"
-                onClick={() => exportTransactionsExcel(transactionsPage.content)}
-              >
-                <Download className="h-5 w-5" aria-hidden="true" />
-                Export Excel
-              </button>
+              <div className="relative">
+                <button
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#dfe6f4] bg-white px-5 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+                  type="button"
+                  onClick={() => setIsExportMenuOpen((current) => !current)}
+                >
+                  <Download className="h-5 w-5" aria-hidden="true" />
+                  Export File
+                </button>
+                {isExportMenuOpen ? (
+                  <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-48 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white shadow-[0_18px_40px_rgba(31,48,96,0.14)]">
+                    <button
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                      type="button"
+                      onClick={() => {
+                        setIsExportMenuOpen(false)
+                        exportTransactionsFile(transactionsPage.content, 'excel')
+                      }}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                      Excel file
+                    </button>
+                    <button
+                      className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                      type="button"
+                      onClick={() => {
+                        setIsExportMenuOpen(false)
+                        exportTransactionsFile(transactionsPage.content, 'csv')
+                      }}
+                    >
+                      <Download className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                      CSV file
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <button
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-5 text-sm font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
                 type="button"
@@ -657,6 +691,8 @@ export function Dashboard() {
     </main>
   )
 }
+
+
 
 
 
