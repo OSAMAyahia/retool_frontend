@@ -3,23 +3,64 @@ import type { IngestTransactionPayload } from '../types/transaction'
 
 type ExcelRow = Record<string, unknown>
 
-function text(row: ExcelRow, key: string) {
-  const value = row[key]
+const fieldAliases = {
+  transactionId: ['Transaction ID', 'transactionId', 'transaction_id', 'txn_id', 'txn id', 'txn', 'id'],
+  accountId: ['Account ID', 'accountId', 'account_id', 'account_number', 'account number', 'account', 'Journal Items/Account'],
+  amount: ['Amount', 'amount', 'amt', 'value', 'transaction_amount'],
+  type: ['Type', 'type', 'cr_dr', 'cr/dr', 'dr_cr', 'debit_credit', 'debit/credit'],
+  status: ['Status', 'status', 'source_status'],
+  source: ['Source', 'source', 'channel', 'origin'],
+  valueDate: ['Value Date', 'valueDate', 'value_date', 'date', 'Date'],
+  createdAt: ['Created At', 'createdAt', 'created_at'],
+  journalDate: ['Date', 'date', 'journal_date', 'Journal Date', 'value_date', 'Value Date'],
+  journal: ['Journal', 'journal', 'journal_id', 'journal id'],
+  reference: ['Reference', 'reference', 'ref', 'journal_id', 'journal id', 'txn_id'],
+  itemLabel: ['Journal Items/label', 'itemLabel', 'item_label', 'label', 'description', 'txn_id'],
+  itemAccount: ['Journal Items/Account', 'itemAccount', 'item_account', 'account_number', 'account number', 'account', 'Account ID'],
+  debit: ['Journal Items/Debit', 'debit', 'Debit', 'dr_amount'],
+  credit: ['Journal Items/Credit', 'credit', 'Credit', 'cr_amount'],
+  analytic: ['Journal Items/Analytic', 'analytic', 'analytics', 'cost_center'],
+} as const
+
+function normalizeKey(key: string) {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function findValue(row: ExcelRow, aliases: readonly string[]) {
+  const entries = Object.entries(row)
+  for (const alias of aliases) {
+    const direct = row[alias]
+    if (direct != null && direct !== '') {
+      return direct
+    }
+
+    const normalizedAlias = normalizeKey(alias)
+    const match = entries.find(([key, value]) => normalizeKey(key) === normalizedAlias && value != null && value !== '')
+    if (match) {
+      return match[1]
+    }
+  }
+
+  return null
+}
+
+function textAny(row: ExcelRow, aliases: readonly string[]) {
+  const value = findValue(row, aliases)
   if (value == null || value === '') {
     return null
   }
-  return String(value)
+  return String(value).trim()
 }
 
-function numberValue(row: ExcelRow, key: string) {
-  const value = row[key]
+function numberAny(row: ExcelRow, aliases: readonly string[]) {
+  const value = findValue(row, aliases)
   if (value == null || value === '') {
     return null
   }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null
   }
-  const parsed = Number(String(value).replace(/,/g, ''))
+  const parsed = Number(String(value).replace(/,/g, '').trim())
   return Number.isFinite(parsed) ? parsed : null
 }
 
@@ -29,8 +70,18 @@ function excelSerialDate(value: number) {
   return date.toISOString()
 }
 
-function dateValue(row: ExcelRow) {
-  const value = row.Date
+function parseSlashDate(value: string) {
+  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/)
+  if (!match) {
+    return null
+  }
+
+  const [, month, day, year, hour = '0', minute = '0'] = match
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))).toISOString()
+}
+
+function dateAny(row: ExcelRow, aliases: readonly string[]) {
+  const value = findValue(row, aliases)
   if (value == null || value === '') {
     return null
   }
@@ -48,69 +99,93 @@ function dateValue(row: ExcelRow) {
     return excelSerialDate(Number(asText))
   }
 
+  const slashDate = parseSlashDate(asText)
+  if (slashDate) {
+    return slashDate
+  }
+
   const parsed = new Date(asText)
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
 }
 
-
-function isTransactionExportRow(row: ExcelRow) {
-  return 'Transaction ID' in row || 'Account ID' in row || 'Amount' in row || 'Value Date' in row
+function normalizeType(value: string | null, amount: number) {
+  const normalized = value?.trim().toLowerCase()
+  if (normalized === 'dr' || normalized === 'debit' || normalized === 'd') {
+    return 'Debit'
+  }
+  if (normalized === 'cr' || normalized === 'credit' || normalized === 'c') {
+    return 'Credit'
+  }
+  return amount < 0 ? 'Debit' : 'Credit'
 }
 
-function transactionDateValue(row: ExcelRow, key: string) {
-  const value = row[key]
-  if (value == null || value === '') {
+function readWorkbook(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  if (extension === 'csv') {
+    return file.text().then((content) => XLSX.read(content, { type: 'string', cellDates: true }))
+  }
+
+  return file.arrayBuffer().then((content) => XLSX.read(content, { cellDates: true }))
+}
+
+function buildTransactionId(row: ExcelRow, rowIndex: number) {
+  const transactionId = textAny(row, fieldAliases.transactionId)
+  const journal = textAny(row, fieldAliases.journal)
+  const account = textAny(row, fieldAliases.accountId)
+  const reference = textAny(row, fieldAliases.reference)
+  const base = transactionId || reference || journal || 'IMPORT'
+
+  return `${base}-${journal || 'JOURNAL'}-${account || 'ACCOUNT'}-${rowIndex}`
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .slice(0, 128)
+}
+
+function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | null {
+  const hasAnyValue = Object.values(row).some((value) => value != null && value !== '')
+  if (!hasAnyValue) {
     return null
   }
 
-  if (value instanceof Date) {
-    return value.toISOString()
-  }
-
-  if (typeof value === 'number') {
-    return excelSerialDate(value)
-  }
-
-  const parsed = new Date(String(value).trim())
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
-}
-
-function parseTransactionExportRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload {
-  const signedAmount = numberValue(row, 'Amount') ?? 0
-  const absoluteAmount = Math.abs(signedAmount)
-  const declaredType = text(row, 'Type')
-  const type = declaredType || (signedAmount < 0 ? 'Debit' : 'Credit')
-  const valueDate = transactionDateValue(row, 'Value Date')
+  const rawAmount = numberAny(row, fieldAliases.amount) ?? 0
+  const amount = Math.abs(rawAmount)
+  const type = normalizeType(textAny(row, fieldAliases.type), rawAmount)
+  const date = dateAny(row, fieldAliases.valueDate)
+  const journalDate = dateAny(row, fieldAliases.journalDate) ?? date
+  const account = textAny(row, fieldAliases.accountId) || textAny(row, fieldAliases.itemAccount) || 'UNKNOWN'
+  const source = textAny(row, fieldAliases.source) || 'Imported File'
+  const originalTransactionId = textAny(row, fieldAliases.transactionId)
+  const reference = textAny(row, fieldAliases.reference) || originalTransactionId || `IMPORT-${rowIndex}`
+  const journal = textAny(row, fieldAliases.journal) || source
+  const label = textAny(row, fieldAliases.itemLabel) || originalTransactionId || reference || 'Imported row'
+  const explicitDebit = numberAny(row, fieldAliases.debit)
+  const explicitCredit = numberAny(row, fieldAliases.credit)
+  const debit = explicitDebit ?? (type === 'Debit' ? amount : null)
+  const credit = explicitCredit ?? (type === 'Credit' ? amount : null)
 
   return {
-    transactionId: text(row, 'Transaction ID') || `EXCEL-TXN-${rowIndex}`,
-    accountId: text(row, 'Account ID') || 'UNKNOWN',
-    amount: absoluteAmount,
+    transactionId: buildTransactionId(row, rowIndex),
+    accountId: account,
+    amount,
     currency: 'SAR',
     type,
-    status: text(row, 'Status') || 'IMPORTED',
-    source: text(row, 'Source') || 'Excel',
-    description: text(row, 'Transaction ID') || 'Imported transaction',
-    valueDate,
-    Date: valueDate,
-    Journal: text(row, 'Source') || 'Imported Transactions',
-    Reference: text(row, 'Transaction ID') || `EXCEL-TXN-${rowIndex}`,
-    'Journal Items/label': text(row, 'Transaction ID') || 'Imported transaction',
-    'Journal Items/Account': text(row, 'Account ID') || 'UNKNOWN',
-    'Journal Items/Debit': type.toLowerCase() === 'debit' ? absoluteAmount : null,
-    'Journal Items/Credit': type.toLowerCase() === 'credit' ? absoluteAmount : null,
-    'Journal Items/Analytic': null,
+    status: textAny(row, fieldAliases.status) || 'IMPORTED',
+    source,
+    description: label,
+    valueDate: date,
+    Date: journalDate,
+    Journal: journal,
+    Reference: reference,
+    'Journal Items/label': label,
+    'Journal Items/Account': account,
+    'Journal Items/Debit': debit,
+    'Journal Items/Credit': credit,
+    'Journal Items/Analytic': textAny(row, fieldAliases.analytic),
   }
-}
-function buildTransactionId(row: ExcelRow, rowIndex: number) {
-  const reference = text(row, 'Reference') || 'EXCEL'
-  const label = text(row, 'Journal Items/label') || 'ROW'
-  const account = text(row, 'Journal Items/Account') || 'ACCOUNT'
-  return `EXCEL-${reference}-${label}-${account}-${rowIndex}`.replace(/\s+/g, '-').slice(0, 128)
 }
 
 export async function parseExcelToTransactions(file: File): Promise<IngestTransactionPayload[]> {
-  const workbook = XLSX.read(await file.arrayBuffer(), { cellDates: true })
+  const workbook = await readWorkbook(file)
   const firstSheetName = workbook.SheetNames[0]
   if (!firstSheetName) {
     throw new Error('No worksheet found in the imported file')
@@ -124,43 +199,7 @@ export async function parseExcelToTransactions(file: File): Promise<IngestTransa
   }
 
   return rows.flatMap((row, index) => {
-    const hasAnyValue = Object.values(row).some((value) => value != null && value !== '')
-    if (!hasAnyValue) {
-      return []
-    }
-
-    if (isTransactionExportRow(row)) {
-      return [parseTransactionExportRow(row, index + 1)]
-    }
-
-    const debit = numberValue(row, 'Journal Items/Debit')
-    const credit = numberValue(row, 'Journal Items/Credit')
-    const amount = debit && debit > 0 ? debit : credit && credit > 0 ? credit : 0
-    const type = debit && debit > 0 ? 'Debit' : 'Credit'
-    const date = dateValue(row)
-    const label = text(row, 'Journal Items/label')
-    const account = text(row, 'Journal Items/Account')
-
-    return [{
-      transactionId: buildTransactionId(row, index + 1),
-      accountId: account || 'UNKNOWN',
-      amount,
-      currency: 'SAR',
-      type,
-      status: 'IMPORTED',
-      source: 'Excel',
-      description: label || 'Imported journal item',
-      valueDate: date,
-      Date: date,
-      Journal: text(row, 'Journal'),
-      Reference: text(row, 'Reference'),
-      'Journal Items/label': label,
-      'Journal Items/Account': account,
-      'Journal Items/Debit': debit,
-      'Journal Items/Credit': credit,
-      'Journal Items/Analytic': text(row, 'Journal Items/Analytic'),
-    }]
+    const parsed = parseRow(row, index + 1)
+    return parsed ? [parsed] : []
   })
 }
-
-
