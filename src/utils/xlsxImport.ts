@@ -113,14 +113,14 @@ export async function parseExcelToTransactions(file: File): Promise<IngestTransa
   const workbook = XLSX.read(await file.arrayBuffer(), { cellDates: true })
   const firstSheetName = workbook.SheetNames[0]
   if (!firstSheetName) {
-    throw new Error('No worksheet found in xlsx file')
+    throw new Error('No worksheet found in the imported file')
   }
 
   const sheet = workbook.Sheets[firstSheetName]
   const rows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, { defval: null, raw: true })
 
   if (!rows.length) {
-    throw new Error('No data rows found in xlsx file')
+    throw new Error('No data rows found in the imported file')
   }
 
   return rows.flatMap((row, index) => {
@@ -162,4 +162,5 @@ export async function parseExcelToTransactions(file: File): Promise<IngestTransa
     }]
   })
 }
+
 

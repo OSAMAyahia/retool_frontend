@@ -139,7 +139,8 @@ function exportTransactionsExcel(transactions: Transaction[]) {
 export function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const excelInputRef = useRef<HTMLInputElement | null>(null)
+  const csvInputRef = useRef<HTMLInputElement | null>(null)
   const [filters, setFilters] = useState<TransactionFilters>({})
   const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialTransactionsPage)
   const [journalRows, setJournalRows] = useState(0)
@@ -159,6 +160,7 @@ export function Dashboard() {
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [importRows, setImportRows] = useState<IngestTransactionPayload[]>([])
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
+  const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
 
   const loadTransactions = useCallback(
     async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
@@ -285,7 +287,7 @@ export function Dashboard() {
     }
   }
 
-  const handleImportExcel = async (file: File | undefined) => {
+  const handleImportFile = async (file: File | undefined) => {
     if (!file) {
       return
     }
@@ -302,8 +304,11 @@ export function Dashboard() {
       setActionError(`Import preview failed. ${getApiErrorMessage(importError)}`)
     } finally {
       setIsActionLoading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      if (excelInputRef.current) {
+        excelInputRef.current.value = ''
+      }
+      if (csvInputRef.current) {
+        csvInputRef.current.value = ''
       }
     }
   }
@@ -408,21 +413,56 @@ export function Dashboard() {
               </span>
             </div>
             <input
-              ref={fileInputRef}
+              ref={excelInputRef}
               className="hidden"
               type="file"
-              accept=".xlsx"
-              onChange={(event) => void handleImportExcel(event.target.files?.[0])}
+              accept=".xlsx,.xls"
+              onChange={(event) => void handleImportFile(event.target.files?.[0])}
             />
-            <button
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isActionLoading}
-            >
-              <Upload className="h-5 w-5" aria-hidden="true" />
-              Import Excel
-            </button>
+            <input
+              ref={csvInputRef}
+              className="hidden"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void handleImportFile(event.target.files?.[0])}
+            />
+            <div className="relative">
+              <button
+                className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
+                type="button"
+                onClick={() => setIsImportMenuOpen((current) => !current)}
+                disabled={isActionLoading}
+              >
+                <Upload className="h-5 w-5" aria-hidden="true" />
+                Import File
+              </button>
+              {isImportMenuOpen ? (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-48 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white shadow-[0_18px_40px_rgba(31,48,96,0.14)]">
+                  <button
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                    type="button"
+                    onClick={() => {
+                      setIsImportMenuOpen(false)
+                      excelInputRef.current?.click()
+                    }}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                    Excel file
+                  </button>
+                  <button
+                    className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                    type="button"
+                    onClick={() => {
+                      setIsImportMenuOpen(false)
+                      csvInputRef.current?.click()
+                    }}
+                  >
+                    <Upload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                    CSV file
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
@@ -617,6 +657,11 @@ export function Dashboard() {
     </main>
   )
 }
+
+
+
+
+
 
 
 
