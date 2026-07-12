@@ -6,6 +6,9 @@ export interface Transaction {
   amount: number
   currency: string
   type: string
+  date?: string | null
+  journalId?: string | null
+  crDr?: string | null
   sourceStatus: string | null
   source: string
   internalStatus: InternalStatus
@@ -26,6 +29,9 @@ export interface Journal {
   reference: string | null
   itemLabel: string | null
   itemAccount: string | null
+  date?: string | null
+  amount?: number | null
+  crDr?: string | null
   debit: number | null
   credit: number | null
   analytic: string | null
@@ -38,11 +44,18 @@ export interface Journal {
 
 
 export interface IngestTransactionPayload {
-  transactionId: string
-  accountId: string
+  date?: string | null
+  txn_id?: string
+  journal_id?: string
+  account_number?: string
+  cr_dr?: string
+  value_date?: string | null
+  created_at?: string | null
+  transactionId?: string
+  accountId?: string
   amount: number
-  currency: string
-  type: string
+  currency?: string
+  type?: string
   status?: string | null
   source?: string
   description?: string | null

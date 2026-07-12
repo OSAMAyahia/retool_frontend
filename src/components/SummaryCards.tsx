@@ -13,7 +13,7 @@ const cards = [
   },
   {
     key: 'unCompleted',
-    label: 'Un-completed',
+    label: 'Not completed',
     caption: 'of total',
     icon: Clock3,
     frame: 'border-[#ffdcb8] shadow-[0_12px_30px_rgba(255,138,0,0.08)]',

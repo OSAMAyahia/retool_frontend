@@ -164,9 +164,16 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
   const credit = explicitCredit ?? (type === 'Credit' ? amount : null)
 
   return {
+    date: journalDate,
+    txn_id: originalTransactionId || buildTransactionId(row, rowIndex),
+    journal_id: journal,
+    account_number: account,
+    amount,
+    cr_dr: type === 'Debit' ? 'DR' : 'CR',
+    value_date: date,
+    created_at: dateAny(row, fieldAliases.createdAt),
     transactionId: buildTransactionId(row, rowIndex),
     accountId: account,
-    amount,
     currency: 'SAR',
     type,
     status: textAny(row, fieldAliases.status) || 'IMPORTED',

@@ -1,4 +1,4 @@
-import { ArrowLeft, LogOut, RefreshCw, RotateCw, Send, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Download, FileSpreadsheet, LogOut, RefreshCw, RotateCw, Send, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
@@ -8,6 +8,7 @@ import { JournalTable } from '../components/JournalTable'
 import { SummaryCards } from '../components/SummaryCards'
 import { getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
+import { dashboardColumnLabels, displayDate, journalAmount, journalCrDr, journalDate } from '../utils/tableFields'
 
 const initialJournalsPage: PageResponse<Journal> = {
   content: [],
@@ -95,6 +96,33 @@ function getApiErrorMessage(error: unknown) {
   return 'Unknown error'
 }
 
+type ExportFormat = 'excel' | 'csv'
+
+function exportJournalsFile(journals: Journal[], format: ExportFormat) {
+  const rows = journals.map((journal) => [
+    displayDate(journalDate(journal)),
+    journal.transactionId,
+    journal.journal ?? '',
+    journal.itemAccount ?? '',
+    journalAmount(journal) ?? '',
+    journalCrDr(journal),
+    displayDate(journal.journalDate),
+    journal.createdAt,
+  ])
+  const csv = [dashboardColumnLabels, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\n')
+  const isExcel = format === 'excel'
+  const url = URL.createObjectURL(new Blob([csv], {
+    type: isExcel ? 'application/vnd.ms-excel;charset=utf-8' : 'text/csv;charset=utf-8',
+  }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = isExcel ? 'journal-export.xls' : 'journal-export.csv'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export function JournalPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -106,6 +134,7 @@ export function JournalPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
 
   const summary = useMemo(() => buildJournalSummary(journalsPage), [journalsPage])
 
@@ -202,6 +231,42 @@ export function JournalPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to Dashboard
             </Link>
+            <div className="relative">
+              <button
+                className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#dfe6f4] bg-white/80 px-4 text-xs font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+                type="button"
+                onClick={() => setIsExportMenuOpen((current) => !current)}
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Export File
+              </button>
+              {isExportMenuOpen ? (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-48 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white shadow-[0_18px_40px_rgba(31,48,96,0.14)]">
+                  <button
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false)
+                      exportJournalsFile(journalsPage.content, 'excel')
+                    }}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                    Excel file
+                  </button>
+                  <button
+                    className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false)
+                      exportJournalsFile(journalsPage.content, 'csv')
+                    }}
+                  >
+                    <Download className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                    CSV file
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-4 text-xs font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"

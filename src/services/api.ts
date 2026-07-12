@@ -69,6 +69,13 @@ export interface UpdateStatusPayload {
 
 interface BackendTransaction extends Omit<Transaction, 'source'> {
   source?: string
+  date?: string | null
+  txn_id?: string
+  journal_id?: string | null
+  account_number?: string
+  cr_dr?: string | null
+  value_date?: string | null
+  created_at?: string
 }
 
 interface BackendPage<T> {
@@ -78,6 +85,16 @@ interface BackendPage<T> {
   size?: number
   totalElements?: number
   totalPages?: number
+}
+
+interface BackendJournal extends Journal {
+  date?: string | null
+  txn_id?: string
+  journal_id?: string | null
+  account_number?: string | null
+  cr_dr?: string | null
+  value_date?: string | null
+  created_at?: string
 }
 
 export function getStoredAuthToken() {
@@ -126,6 +143,13 @@ function normalizeStatus(status: string) {
 function normalizeTransaction(transaction: BackendTransaction): Transaction {
   return {
     ...transaction,
+    transactionId: transaction.transactionId ?? transaction.txn_id ?? '',
+    accountId: transaction.accountId ?? transaction.account_number ?? '',
+    date: transaction.date ?? transaction.valueDate ?? transaction.value_date ?? null,
+    journalId: transaction.journalId ?? transaction.journal_id ?? null,
+    crDr: transaction.crDr ?? transaction.cr_dr ?? transaction.type,
+    valueDate: transaction.valueDate ?? transaction.value_date ?? null,
+    createdAt: transaction.createdAt ?? transaction.created_at ?? '',
     source: transaction.source ?? 'Excel',
     internalStatus: normalizeStatus(transaction.internalStatus),
   }
@@ -157,18 +181,33 @@ function normalizeTransactionPage(
   }
 }
 
-function normalizeJournalPage(data: BackendPage<Journal> | Journal[]): PageResponse<Journal> {
+function normalizeJournal(journal: BackendJournal): Journal {
+  return {
+    ...journal,
+    transactionId: journal.transactionId ?? journal.txn_id ?? '',
+    journalDate: journal.journalDate ?? journal.value_date ?? journal.date ?? null,
+    journal: journal.journal ?? journal.journal_id ?? null,
+    itemAccount: journal.itemAccount ?? journal.account_number ?? null,
+    date: journal.date ?? journal.journalDate ?? journal.value_date ?? null,
+    crDr: journal.crDr ?? journal.cr_dr ?? null,
+    createdAt: journal.createdAt ?? journal.created_at ?? '',
+  }
+}
+
+function normalizeJournalPage(data: BackendPage<BackendJournal> | BackendJournal[]): PageResponse<Journal> {
   if (Array.isArray(data)) {
+    const content = data.map(normalizeJournal)
+
     return {
-      content: data,
+      content,
       page: 0,
-      size: data.length,
-      totalElements: data.length,
-      totalPages: data.length > 0 ? 1 : 0,
+      size: content.length,
+      totalElements: content.length,
+      totalPages: content.length > 0 ? 1 : 0,
     }
   }
 
-  const content = data.content ?? []
+  const content = (data.content ?? []).map(normalizeJournal)
 
   return {
     content,
@@ -276,7 +315,7 @@ export async function getJournals(
   page: number,
   size: number,
 ): Promise<PageResponse<Journal>> {
-  const response = await api.get<BackendPage<Journal> | Journal[]>('/journals', {
+  const response = await api.get<BackendPage<BackendJournal> | BackendJournal[]>('/journals', {
     params: {
       page,
       size,

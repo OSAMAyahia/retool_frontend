@@ -1,44 +1,25 @@
-import { CalendarDays, Database } from 'lucide-react'
 import type { Transaction } from '../types/transaction'
-import { StatusBadge } from './StatusBadge'
+import {
+  dashboardColumnLabels,
+  displayDate,
+  transactionCrDr,
+  transactionDate,
+  transactionJournalId,
+} from '../utils/tableFields'
 
 interface TransactionTableProps {
   transactions: Transaction[]
   isLoading: boolean
   onSelect: (transaction: Transaction) => void
-  onSourceSelect: (source: string) => void
 }
 
-const columns = ['Transaction', 'Account', 'Amount', 'Type', 'Source', 'Status', 'Value Date']
+const columns = dashboardColumnLabels
 
 function formatAmount(transaction: Transaction) {
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(transaction.amount)
-}
-
-function formatDateParts(value: string | null) {
-  if (!value) {
-    return { date: '-', time: '' }
-  }
-
-  const date = new Date(value)
-  return {
-    date: new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(date),
-    time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(date),
-  }
-}
-
-function DateCell({ value }: { value: string | null }) {
-  const parts = formatDateParts(value)
-
-  return (
-    <span className="inline-flex min-w-0 flex-col leading-tight">
-      <span className="whitespace-nowrap font-bold text-[#24315f]">{parts.date}</span>
-      {parts.time ? <span className="mt-1 whitespace-nowrap text-xs font-semibold text-[#7a86a6]">{parts.time}</span> : null}
-    </span>
-  )
 }
 
 function dotClass(status: Transaction['internalStatus']) {
@@ -69,19 +50,19 @@ export function TransactionTable({
   transactions,
   isLoading,
   onSelect,
-  onSourceSelect,
 }: TransactionTableProps) {
   return (
     <div className="max-h-[680px] overflow-y-auto overflow-x-hidden bg-white">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[21%]" />
           <col className="w-[13%]" />
-          <col className="w-[14%]" />
+          <col className="w-[20%]" />
+          <col className="w-[20%]" />
+          <col className="w-[12%]" />
           <col className="w-[10%]" />
-          <col className="w-[14%]" />
-          <col className="w-[13%]" />
-          <col className="w-[15%]" />
+          <col className="w-[8%]" />
+          <col className="w-[9%]" />
+          <col className="w-[8%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
@@ -112,6 +93,11 @@ export function TransactionTable({
                 onClick={() => onSelect(transaction)}
               >
                 <td className="h-[60px] px-3 align-middle">
+                  <span className="block truncate font-semibold text-[#2d3b68]">
+                    {displayDate(transactionDate(transaction)) || '-'}
+                  </span>
+                </td>
+                <td className="px-3 align-middle">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotClass(transaction.internalStatus)}`} />
                     <span className="min-w-0">
@@ -125,38 +111,33 @@ export function TransactionTable({
                   </span>
                 </td>
                 <td className="px-3 align-middle">
-                  <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">{transaction.accountId}</span>
+                  <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">
+                    {transactionJournalId(transaction) || '-'}
+                  </span>
+                </td>
+                <td className="px-3 align-middle">
+                  <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">
+                    {transaction.accountId}
+                  </span>
                 </td>
                 <td className="px-3 text-left align-middle">
                   <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
-                    {formatAmount(transaction)} <span className="text-xs font-bold text-[#7a86a6]">{transaction.currency}</span>
+                    {formatAmount(transaction)}
                   </span>
                 </td>
                 <td className="px-3 align-middle">
-                  <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold capitalize text-[#33406f]">
-                    {transaction.type}
+                  <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold uppercase text-[#33406f]">
+                    {transactionCrDr(transaction)}
                   </span>
                 </td>
                 <td className="px-3 align-middle">
-                  <button
-                    className="inline-flex max-w-full items-center gap-2 truncate whitespace-nowrap rounded-lg px-2 py-1 text-left font-bold text-[#2d3b68] transition hover:bg-[#eef4ff] hover:text-[#2563eb]"
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onSourceSelect(transaction.source)
-                    }}
-                  >
-                    <Database className="h-4 w-4 shrink-0 text-[#7380a7]" aria-hidden="true" />
-                    <span className="truncate">{transaction.source}</span>
-                  </button>
+                  <span className="block truncate font-semibold text-[#2d3b68]">
+                    {displayDate(transaction.valueDate) || '-'}
+                  </span>
                 </td>
                 <td className="px-3 align-middle">
-                  <StatusBadge status={transaction.internalStatus} />
-                </td>
-                <td className="px-3 align-middle">
-                  <span className="inline-flex min-w-0 items-start gap-1.5">
-                    <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#7380a7]" aria-hidden="true" />
-                    <DateCell value={transaction.valueDate} />
+                  <span className="block truncate font-semibold text-[#2d3b68]">
+                    {displayDate(transaction.createdAt) || '-'}
                   </span>
                 </td>
               </tr>

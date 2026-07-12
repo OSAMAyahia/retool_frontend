@@ -11,6 +11,10 @@ const statusStyles: Record<string, string> = {
 }
 
 function statusLabel(status: InternalStatus) {
+  if (status === 'un-completed' || status === 'UN_COMPLETED' || status === 'UNCOMPLETED') {
+    return 'not completed'
+  }
+
   if (status === 'REJECTED') {
     return 'rejected'
   }

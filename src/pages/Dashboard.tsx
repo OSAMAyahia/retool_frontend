@@ -30,6 +30,13 @@ import {
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import { parseExcelToTransactions } from '../utils/xlsxImport'
+import {
+  dashboardColumnLabels,
+  displayDate,
+  transactionCrDr,
+  transactionDate,
+  transactionJournalId,
+} from '../utils/tableFields'
 import type {
   Journal,
   PageResponse,
@@ -51,7 +58,7 @@ const initialTransactionsPage: PageResponse<Transaction> = {
 const dashboardStatuses: TransactionStatus[] = [
   {
     code: 'un-completed',
-    label: 'Un-completed',
+    label: 'Not completed',
     description: null,
     color: '#f59e0b',
     sortOrder: 10,
@@ -103,29 +110,16 @@ function buildSummary(page: PageResponse<Transaction>, journalRows: number): Tra
 type ExportFormat = 'excel' | 'csv'
 
 function exportTransactionsFile(transactions: Transaction[], format: ExportFormat) {
-  const headers = [
-    'Transaction ID',
-    'Account ID',
-    'Amount',
-    'Currency',
-    'Type',
-    'Source',
-    'Status',
-    'Value Date',
-    'Created At',
-    'Updated At',
-  ]
+  const headers = dashboardColumnLabels
   const rows = transactions.map((transaction) => [
+    displayDate(transactionDate(transaction)),
     transaction.transactionId,
+    transactionJournalId(transaction),
     transaction.accountId,
     transaction.amount,
-    transaction.currency,
-    transaction.type,
-    transaction.source,
-    transaction.internalStatus,
-    transaction.valueDate ?? '',
+    transactionCrDr(transaction),
+    displayDate(transaction.valueDate),
     transaction.createdAt,
-    transaction.updatedAt,
   ])
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
@@ -246,11 +240,6 @@ export function Dashboard() {
 
   const handleResetFilters = () => {
     setFilters({})
-    setPage(0)
-  }
-
-  const handleSourceSelect = (source: string) => {
-    setFilters((current) => ({ ...current, source }))
     setPage(0)
   }
 
@@ -617,7 +606,6 @@ export function Dashboard() {
             transactions={transactionsPage.content}
             isLoading={isLoading}
             onSelect={handleSelectTransaction}
-            onSourceSelect={handleSourceSelect}
           />
 
           <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
