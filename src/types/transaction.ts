@@ -68,6 +68,7 @@ export interface IngestTransactionPayload {
   'Journal Items/Debit'?: number | null
   'Journal Items/Credit'?: number | null
   'Journal Items/Analytic'?: string | null
+  distributions?: Record<string, number> | null
 }
 export interface ProcessingResponse {
   processed: number
