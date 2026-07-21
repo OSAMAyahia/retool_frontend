@@ -279,6 +279,11 @@ export function JournalPage() {
               type="button"
               onClick={() => void handleSendToOdoo()}
               disabled={isActionLoading || sendableJournalCount === 0}
+              title={
+                sendableJournalCount > 0
+                  ? `${sendableJournalCount} new or rejected journal rows can be sent to Odoo`
+                  : 'There are no new or rejected journal rows to send'
+              }
             >
               <Send className="h-4 w-4" aria-hidden="true" />
               {sendableJournalCount > 0 ? `Send ${sendableJournalCount} to Odoo` : 'No rows to send'}
