@@ -194,7 +194,7 @@ export function JournalPage() {
 
     try {
       const result = await sendJournalsToOdoo()
-      setActionMessage(`Updated ${result.processed} journal rows as sent to Odoo.`)
+      setActionMessage(`Sent ${result.processed} journal rows to Odoo. New and rejected rows are eligible for retry.`)
       await loadJournals(false)
     } catch (error) {
       setActionError(`Odoo update failed. ${getApiErrorMessage(error)}`)
