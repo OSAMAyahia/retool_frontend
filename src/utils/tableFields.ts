@@ -11,6 +11,11 @@ export const dashboardColumnLabels = [
   'created_at',
 ] as const
 
+export const journalColumnLabels = [
+  ...dashboardColumnLabels,
+  'status',
+] as const
+
 function rawObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }

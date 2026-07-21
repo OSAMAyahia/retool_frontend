@@ -8,7 +8,7 @@ import { JournalTable } from '../components/JournalTable'
 import { SummaryCards } from '../components/SummaryCards'
 import { getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
-import { dashboardColumnLabels, displayDate, journalAmount, journalCrDr, journalDate } from '../utils/tableFields'
+import { displayDate, journalAmount, journalColumnLabels, journalCrDr, journalDate } from '../utils/tableFields'
 
 const initialJournalsPage: PageResponse<Journal> = {
   content: [],
@@ -108,8 +108,9 @@ function exportJournalsFile(journals: Journal[], format: ExportFormat) {
     journalCrDr(journal),
     displayDate(journal.journalDate),
     journal.createdAt,
+    journal.status,
   ])
-  const csv = [dashboardColumnLabels, ...rows]
+  const csv = [journalColumnLabels, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
     .join('\n')
   const isExcel = format === 'excel'

@@ -1,5 +1,6 @@
 import type { Journal } from '../types/transaction'
-import { dashboardColumnLabels, displayDate, journalAmount, journalCrDr, journalDate } from '../utils/tableFields'
+import { StatusBadge } from './StatusBadge'
+import { displayDate, journalAmount, journalColumnLabels, journalCrDr, journalDate } from '../utils/tableFields'
 
 interface JournalTableProps {
   journals: Journal[]
@@ -7,7 +8,7 @@ interface JournalTableProps {
   onSelect: (journal: Journal) => void
 }
 
-const columns = dashboardColumnLabels
+const columns = journalColumnLabels
 
 function formatMoney(value: number | null) {
   if (value == null) {
@@ -42,13 +43,14 @@ export function JournalTable({ journals, isLoading, onSelect }: JournalTableProp
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
           <col className="w-[13%]" />
-          <col className="w-[20%]" />
-          <col className="w-[20%]" />
+          <col className="w-[16%]" />
+          <col className="w-[14%]" />
           <col className="w-[12%]" />
-          <col className="w-[10%]" />
-          <col className="w-[8%]" />
+          <col className="w-[9%]" />
+          <col className="w-[7%]" />
           <col className="w-[9%]" />
           <col className="w-[8%]" />
+          <col className="w-[12%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
@@ -115,6 +117,9 @@ export function JournalTable({ journals, isLoading, onSelect }: JournalTableProp
                   <span className="block truncate font-semibold text-[#2d3b68]">
                     {displayDate(journal.createdAt) || '-'}
                   </span>
+                </td>
+                <td className="px-5 align-middle">
+                  <StatusBadge status={journal.status} />
                 </td>
               </tr>
             ))
