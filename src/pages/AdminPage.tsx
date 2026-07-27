@@ -54,7 +54,7 @@ function errorMessage(error: unknown) {
   }
 
   return 'Request failed'
-}
+};
 
 function userToDraft(user: AdminUser): UserDraft {
   return {
