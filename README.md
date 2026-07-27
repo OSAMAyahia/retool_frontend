@@ -6,7 +6,7 @@ Standalone React dashboard for monitoring Retool to Odoo transaction sync status
 
 - Node.js 22+
 - npm 10+
-- Backend API expected at `https://absat-erp.com/barq-corebanking-api/api/v1` in production
+- Backend API is proxied through `/api/v1` in production.
 
 ## Setup
 
@@ -18,7 +18,7 @@ npm run dev
 The API base URL is configured in `.env`:
 
 ```text
-VITE_API_BASE_URL=https://absat-erp.com/barq-corebanking-api/api/v1
+VITE_API_BASE_URL=/api/v1
 ```
 
 ## Scripts
@@ -47,7 +47,7 @@ POST /transactions/ingest
 With the production base URL, the full endpoint is:
 
 ```text
-POST https://absat-erp.com/barq-corebanking-api/api/v1/transactions/ingest
+POST /api/v1/transactions/ingest
 ```
 
 It receives a JSON array. Each item should follow this shape:
