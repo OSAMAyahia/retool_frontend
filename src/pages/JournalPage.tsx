@@ -8,7 +8,7 @@ import { JournalTable } from '../components/JournalTable'
 import { SummaryCards } from '../components/SummaryCards'
 import { getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
-import { dashboardColumnLabels, displayDate, journalAmount, journalCrDr, journalDate } from '../utils/tableFields'
+import { displayDate, journalAmount, journalColumnLabels, journalCrDr, journalDate } from '../utils/tableFields'
 
 const initialJournalsPage: PageResponse<Journal> = {
   content: [],
@@ -76,6 +76,8 @@ const journalStatuses: TransactionStatus[] = [
   },
 ]
 
+const odooSendableStatuses = new Set(['NEW', 'REJECTED'])
+
 function buildJournalSummary(page: PageResponse<Journal>): TransactionSummary {
   const sent = page.content.filter((journal) => journal.status === 'SENT').length
   const unCompleted = Math.max(page.totalElements - sent, 0)
@@ -108,8 +110,9 @@ function exportJournalsFile(journals: Journal[], format: ExportFormat) {
     journalCrDr(journal),
     displayDate(journal.journalDate),
     journal.createdAt,
+    journal.status,
   ])
-  const csv = [dashboardColumnLabels, ...rows]
+  const csv = [journalColumnLabels, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
     .join('\n')
   const isExcel = format === 'excel'
@@ -137,6 +140,10 @@ export function JournalPage() {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
 
   const summary = useMemo(() => buildJournalSummary(journalsPage), [journalsPage])
+  const sendableJournalCount = useMemo(
+    () => journalsPage.content.filter((journal) => odooSendableStatuses.has(journal.status)).length,
+    [journalsPage.content],
+  )
 
   const journalOptions = useMemo(
     () => Array.from(new Set(journalsPage.content.map((journal) => journal.journal).filter(Boolean))) as string[],
@@ -187,7 +194,7 @@ export function JournalPage() {
 
     try {
       const result = await sendJournalsToOdoo()
-      setActionMessage(`Updated ${result.processed} journal rows as sent to Odoo.`)
+      setActionMessage(`Sent ${result.processed} journal rows to Odoo. New and rejected rows are eligible for retry.`)
       await loadJournals(false)
     } catch (error) {
       setActionError(`Odoo update failed. ${getApiErrorMessage(error)}`)
@@ -268,13 +275,18 @@ export function JournalPage() {
               ) : null}
             </div>
             <button
-              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-4 text-xs font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-4 text-xs font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               onClick={() => void handleSendToOdoo()}
-              disabled={isActionLoading}
+              disabled={isActionLoading || sendableJournalCount === 0}
+              title={
+                sendableJournalCount > 0
+                  ? `${sendableJournalCount} new or rejected journal rows can be sent to Odoo`
+                  : 'There are no new or rejected journal rows to send'
+              }
             >
               <Send className="h-4 w-4" aria-hidden="true" />
-              Send to Odoo
+              {sendableJournalCount > 0 ? `Send ${sendableJournalCount} to Odoo` : 'No rows to send'}
             </button>
             <button
               className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"

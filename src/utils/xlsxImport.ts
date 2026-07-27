@@ -20,6 +20,7 @@ const fieldAliases = {
   debit: ['Journal Items/Debit', 'debit', 'Debit', 'dr_amount'],
   credit: ['Journal Items/Credit', 'credit', 'Credit', 'cr_amount'],
   analytic: ['Journal Items/Analytic', 'analytic', 'analytics', 'cost_center'],
+  distributions: ['distributions', 'Distributions', 'analytic_distribution', 'Analytic Distribution'],
 } as const
 
 function normalizeKey(key: string) {
@@ -62,6 +63,43 @@ function numberAny(row: ExcelRow, aliases: readonly string[]) {
   }
   const parsed = Number(String(value).replace(/,/g, '').trim())
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function distributionsAny(row: ExcelRow, aliases: readonly string[]) {
+  const value = findValue(row, aliases)
+  if (value == null || value === '') {
+    return null
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, number>
+  }
+
+  const text = String(value).trim()
+  if (!text) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return Object.fromEntries(
+        Object.entries(parsed)
+          .map(([key, entryValue]) => [key, Number(entryValue)])
+          .filter(([, entryValue]) => Number.isFinite(entryValue)),
+      )
+    }
+  } catch {
+    // Fall back to a compact "16:100,17:50" format.
+  }
+
+  const entries = text
+    .split(',')
+    .map((part) => part.split(':', 2).map((piece) => piece.trim()))
+    .filter(([key, entryValue]) => key && Number.isFinite(Number(entryValue)))
+    .map(([key, entryValue]) => [key, Number(entryValue)])
+
+  return entries.length ? Object.fromEntries(entries) : null
 }
 
 function excelSerialDate(value: number) {
@@ -162,6 +200,7 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
   const explicitCredit = numberAny(row, fieldAliases.credit)
   const debit = explicitDebit ?? (type === 'Debit' ? amount : null)
   const credit = explicitCredit ?? (type === 'Credit' ? amount : null)
+  const distributions = distributionsAny(row, fieldAliases.distributions)
 
   return {
     date: journalDate,
@@ -188,6 +227,7 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
     'Journal Items/Debit': debit,
     'Journal Items/Credit': credit,
     'Journal Items/Analytic': textAny(row, fieldAliases.analytic),
+    distributions,
   }
 }
 
