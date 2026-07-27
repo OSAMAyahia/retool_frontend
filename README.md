@@ -2,7 +2,9 @@
 
 
 
-## Getting started
+- Node.js 22+
+- npm 10+
+- Backend API expected at `https://absat-erp.com/barq-corebanking-api/api/v1` in production
 
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
 
@@ -22,7 +24,9 @@ git push -uf origin main
 
 ## Integrate with your tools
 
-* [Set up project integrations](https://gitlab.com/business-cube-projects/barq/mware-corebanking/mware-corebanking-web-react/-/settings/integrations)
+```text
+VITE_API_BASE_URL=https://absat-erp.com/barq-corebanking-api/api/v1
+```
 
 ## Collaborate with your team
 
@@ -46,9 +50,11 @@ Use the built-in continuous integration in GitLab.
 
 # Editing this README
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+With the production base URL, the full endpoint is:
 
-## Suggestions for a good README
+```text
+POST https://absat-erp.com/barq-corebanking-api/api/v1/transactions/ingest
+```
 
 Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
 
