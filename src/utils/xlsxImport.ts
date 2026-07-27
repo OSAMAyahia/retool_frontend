@@ -160,10 +160,10 @@ function normalizeType(value: string | null, amount: number) {
 function readWorkbook(file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase()
   if (extension === 'csv') {
-    return file.text().then((content) => XLSX.read(content, { type: 'string', cellDates: true }))
+    return file.text().then((content) => XLSX.read(content, { type: 'string', cellDates: true, dense: true }))
   }
 
-  return file.arrayBuffer().then((content) => XLSX.read(content, { cellDates: true }))
+  return file.arrayBuffer().then((content) => XLSX.read(content, { cellDates: true, dense: true }))
 }
 
 function buildTransactionId(row: ExcelRow, rowIndex: number) {
@@ -190,7 +190,7 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
   const type = normalizeType(textAny(row, fieldAliases.type), rawAmount)
   const date = dateAny(row, fieldAliases.valueDate)
   const journalDate = dateAny(row, fieldAliases.journalDate) ?? date
-  const account = textAny(row, fieldAliases.accountId) || textAny(row, fieldAliases.itemAccount) || 'UNKNOWN'
+  const account = textAny(row, fieldAliases.accountId) || textAny(row, fieldAliases.itemAccount) || ''
   const source = textAny(row, fieldAliases.source) || 'Imported File'
   const originalTransactionId = textAny(row, fieldAliases.transactionId)
   const reference = textAny(row, fieldAliases.reference) || originalTransactionId || `IMPORT-${rowIndex}`
@@ -200,13 +200,15 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
   const explicitCredit = numberAny(row, fieldAliases.credit)
   const debit = explicitDebit ?? (type === 'Debit' ? amount : null)
   const credit = explicitCredit ?? (type === 'Credit' ? amount : null)
+  const analytic = textAny(row, fieldAliases.analytic)
   const distributions = distributionsAny(row, fieldAliases.distributions)
+    ?? distributionsAny(row, fieldAliases.analytic)
 
   return {
     date: journalDate,
     txn_id: originalTransactionId || buildTransactionId(row, rowIndex),
     journal_id: journal,
-    account_number: account,
+    account_number: account || null,
     amount,
     cr_dr: type === 'Debit' ? 'DR' : 'CR',
     value_date: date,
@@ -226,7 +228,7 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
     'Journal Items/Account': account,
     'Journal Items/Debit': debit,
     'Journal Items/Credit': credit,
-    'Journal Items/Analytic': textAny(row, fieldAliases.analytic),
+    'Journal Items/Analytic': analytic,
     distributions,
   }
 }

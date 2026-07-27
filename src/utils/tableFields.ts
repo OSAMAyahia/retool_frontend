@@ -12,7 +12,13 @@ export const dashboardColumnLabels = [
 ] as const
 
 export const journalColumnLabels = [
-  ...dashboardColumnLabels,
+  'journal date',
+  'txn_id',
+  'journal_id',
+  'total debit',
+  'total credit',
+  'lines',
+  'created_at',
   'status',
 ] as const
 
@@ -50,13 +56,13 @@ export function transactionCrDr(transaction: Transaction) {
 }
 
 export function journalAmount(journal: Journal) {
-  return journal.amount ?? journal.debit ?? journal.credit ?? null
+  return Math.max(journal.totalDebit, journal.totalCredit)
 }
 
 export function journalCrDr(journal: Journal) {
-  return journal.crDr ?? (journal.debit != null ? 'DR' : journal.credit != null ? 'CR' : '')
+  return journal.totalDebit === journal.totalCredit ? 'BALANCED' : 'UNBALANCED'
 }
 
 export function journalDate(journal: Journal) {
-  return journal.date ?? journal.journalDate ?? ''
+  return journal.journalDate ?? ''
 }

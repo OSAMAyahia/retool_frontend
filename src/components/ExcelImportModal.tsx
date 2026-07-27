@@ -24,7 +24,7 @@ const columns = [
   { key: 'Journal Items/Account', label: 'Journal Items/Account', type: 'text' },
   { key: 'Journal Items/Debit', label: 'Debit', type: 'number' },
   { key: 'Journal Items/Credit', label: 'Credit', type: 'number' },
-  { key: 'Journal Items/Analytic', label: 'Analytic', type: 'text' },
+  { key: 'Journal Items/Analytic', label: 'Journal Items/Analytic', type: 'text' },
   { key: 'currency', label: 'Currency', type: 'text' },
   { key: 'type', label: 'Type', type: 'text' },
 ] as const
@@ -74,7 +74,7 @@ export function ExcelImportModal({
 }: ExcelImportModalProps) {
   const [visibleRows, setVisibleRows] = useState(25)
   const invalidCount = useMemo(
-    () => rows.filter((row) => !row.transactionId || !row.accountId || !row.amount || !row.type).length,
+    () => rows.filter((row) => !row.transactionId || !row.amount || !row.type).length,
     [rows],
   )
 
@@ -88,11 +88,23 @@ export function ExcelImportModal({
       const nextRow = { ...row, [key]: nextValue }
 
       if (key === 'Journal Items/Account') {
-        nextRow.accountId = String(nextValue || 'UNKNOWN')
+        nextRow.accountId = String(nextValue || '')
+        nextRow.account_number = String(nextValue || '') || null
       }
 
       if (key === 'Journal Items/label') {
         nextRow.description = String(nextValue || 'Imported journal item')
+      }
+
+      if (key === 'Journal Items/Analytic') {
+        try {
+          const parsed = JSON.parse(String(nextValue || ''))
+          nextRow.distributions = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed as Record<string, number>
+            : null
+        } catch {
+          nextRow.distributions = null
+        }
       }
 
       if (key === 'Journal Items/Debit' || key === 'Journal Items/Credit' || key === 'amount') {
