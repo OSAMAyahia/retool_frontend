@@ -88,13 +88,20 @@ interface BackendPage<T> {
 }
 
 interface BackendJournal extends Journal {
-  date?: string | null
   txn_id?: string
   journal_id?: string | null
-  account_number?: string | null
-  cr_dr?: string | null
-  value_date?: string | null
   created_at?: string
+}
+
+interface ImportUploadStatus {
+  uploadId: string
+  status: 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  uploadedChunks: number
+  totalChunks: number
+  received: number | null
+  duplicates: number | null
+  failed: number | null
+  errorMessage: string | null
 }
 
 export function getStoredAuthToken() {
@@ -185,11 +192,13 @@ function normalizeJournal(journal: BackendJournal): Journal {
   return {
     ...journal,
     transactionId: journal.transactionId ?? journal.txn_id ?? '',
-    journalDate: journal.journalDate ?? journal.value_date ?? journal.date ?? null,
+    journalDate: journal.journalDate ?? null,
     journal: journal.journal ?? journal.journal_id ?? null,
-    itemAccount: journal.itemAccount ?? journal.account_number ?? null,
-    date: journal.date ?? journal.journalDate ?? journal.value_date ?? null,
-    crDr: journal.crDr ?? journal.cr_dr ?? null,
+    totalDebit: journal.totalDebit ?? 0,
+    totalCredit: journal.totalCredit ?? 0,
+    lineCount: journal.lineCount ?? 0,
+    errorMessage: journal.errorMessage ?? null,
+    lines: journal.lines ?? [],
     createdAt: journal.createdAt ?? journal.created_at ?? '',
   }
 }
@@ -305,6 +314,89 @@ export async function ingestTransactions(
   return summary
 }
 
+export async function importTransactionsFile(
+  file: File,
+  onProgress?: (uploadedBytes: number, totalBytes: number, phase: 'uploading' | 'processing') => void,
+): Promise<IngestSummaryResponse> {
+  const chunkSize = 2 * 1024 * 1024
+  const totalChunks = Math.ceil(file.size / chunkSize)
+  const session = await api.post<ImportUploadStatus>('/transactions/import-excel/uploads', {
+    fileName: file.name,
+    totalSize: file.size,
+    chunkSize,
+    totalChunks,
+  })
+  let nextChunkIndex = 0
+  let uploadedBytes = 0
+
+  const uploadChunk = async (chunkIndex: number) => {
+    const start = chunkIndex * chunkSize
+    const chunk = file.slice(start, Math.min(start + chunkSize, file.size))
+    let lastError: unknown
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await api.post(
+          `/transactions/import-excel/uploads/${session.data.uploadId}/chunks/${chunkIndex}`,
+          chunk,
+          {
+            headers: { 'Content-Type': 'application/octet-stream' },
+            timeout: 120000,
+          },
+        )
+        uploadedBytes += chunk.size
+        onProgress?.(Math.min(uploadedBytes, file.size), file.size, 'uploading')
+        return
+      } catch (error) {
+        lastError = error
+        if (attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)))
+        }
+      }
+    }
+
+    throw lastError
+  }
+
+  const worker = async () => {
+    while (true) {
+      const chunkIndex = nextChunkIndex
+      nextChunkIndex += 1
+      if (chunkIndex >= totalChunks) {
+        return
+      }
+      await uploadChunk(chunkIndex)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(3, totalChunks) }, () => worker()))
+  await api.post(`/transactions/import-excel/uploads/${session.data.uploadId}/complete`, undefined, {
+    timeout: 120000,
+  })
+  onProgress?.(file.size, file.size, 'processing')
+
+  for (let poll = 0; poll < 900; poll += 1) {
+    const status = await api.get<ImportUploadStatus>(
+      `/transactions/import-excel/uploads/${session.data.uploadId}`,
+    )
+    if (status.data.status === 'COMPLETED') {
+      return {
+        received: status.data.received ?? 0,
+        duplicates: status.data.duplicates ?? 0,
+        failed: status.data.failed ?? 0,
+        processedAt: new Date().toISOString(),
+        items: [],
+      }
+    }
+    if (status.data.status === 'FAILED') {
+      throw new Error(status.data.errorMessage || 'Large-file processing failed')
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+  }
+
+  throw new Error('Large-file processing did not finish within 30 minutes')
+}
+
 export async function processJournals(): Promise<ProcessingResponse> {
   const response = await api.post<ProcessingResponse>('/journals/process')
   return response.data
@@ -328,6 +420,11 @@ export async function getJournals(
   })
 
   return normalizeJournalPage(response.data)
+}
+
+export async function getJournalById(transactionId: string): Promise<Journal> {
+  const response = await api.get<BackendJournal>(`/journals/${encodeURIComponent(transactionId)}`)
+  return normalizeJournal(response.data)
 }
 
 export async function sendJournalsToOdoo(): Promise<ProcessingResponse> {
