@@ -102,6 +102,7 @@ interface ImportUploadStatus {
   duplicates: number | null
   failed: number | null
   errorMessage: string | null
+  rowsProcessed: number | null
 }
 
 export function getStoredAuthToken() {
@@ -316,7 +317,12 @@ export async function ingestTransactions(
 
 export async function importTransactionsFile(
   file: File,
-  onProgress?: (uploadedBytes: number, totalBytes: number, phase: 'uploading' | 'processing') => void,
+  onProgress?: (
+    uploadedBytes: number,
+    totalBytes: number,
+    phase: 'uploading' | 'processing',
+    rowsProcessed?: number,
+  ) => void,
 ): Promise<IngestSummaryResponse> {
   const chunkSize = 2 * 1024 * 1024
   const totalChunks = Math.ceil(file.size / chunkSize)
@@ -391,6 +397,7 @@ export async function importTransactionsFile(
     if (status.data.status === 'FAILED') {
       throw new Error(status.data.errorMessage || 'Large-file processing failed')
     }
+    onProgress?.(file.size, file.size, 'processing', status.data.rowsProcessed ?? undefined)
     await new Promise((resolve) => window.setTimeout(resolve, 2000))
   }
 

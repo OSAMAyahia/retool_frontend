@@ -300,9 +300,13 @@ export function Dashboard() {
 
       if (useStreamingImport) {
         setActionMessage(`Uploading large file 0% — it will be processed in memory-safe batches.`)
-        const result = await importTransactionsFile(file, (uploadedBytes, totalBytes, phase) => {
+        const result = await importTransactionsFile(file, (uploadedBytes, totalBytes, phase, rowsProcessed) => {
           if (phase === 'processing') {
-            setActionMessage('Upload completed. The server is processing rows in memory-safe batches…')
+            setActionMessage(
+              rowsProcessed
+                ? `Processing rows on the server… ${rowsProcessed.toLocaleString()} rows processed so far.`
+                : 'Upload completed. The server is processing rows in memory-safe batches…',
+            )
             return
           }
           const percent = totalBytes > 0 ? Math.min(Math.round((uploadedBytes / totalBytes) * 100), 100) : 0
