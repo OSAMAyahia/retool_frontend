@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/v1/:path*",
-      "destination": "http://absat-erp.com:8021/api/v1/:path*"
+      "destination": "https://api.absat-erp.com/barq-corebanking/api/v1/:path*"
     },
     {
       "source": "/(.*)",
