@@ -332,15 +332,18 @@ export async function importTransactionsFile(
     chunkSize,
     totalChunks,
   })
-  let nextChunkIndex = 0
   let uploadedBytes = 0
+  const uploadedChunkIndices = new Set<number>()
 
-  const uploadChunk = async (chunkIndex: number) => {
+  // A chunk request can fail transiently (proxy hiccup, rate limiting, a dropped
+  // connection) without the file itself being at fault. Retry each chunk with
+  // exponential backoff + jitter before giving up on it for this pass.
+  const uploadChunkOnce = async (chunkIndex: number, attempts = 4) => {
     const start = chunkIndex * chunkSize
     const chunk = file.slice(start, Math.min(start + chunkSize, file.size))
     let lastError: unknown
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         await api.post(
           `/transactions/import-excel/uploads/${session.data.uploadId}/chunks/${chunkIndex}`,
@@ -350,13 +353,18 @@ export async function importTransactionsFile(
             timeout: 120000,
           },
         )
-        uploadedBytes += chunk.size
+        if (!uploadedChunkIndices.has(chunkIndex)) {
+          uploadedChunkIndices.add(chunkIndex)
+          uploadedBytes += chunk.size
+        }
         onProgress?.(Math.min(uploadedBytes, file.size), file.size, 'uploading')
         return
       } catch (error) {
         lastError = error
-        if (attempt < 2) {
-          await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)))
+        if (attempt < attempts - 1) {
+          const backoff = Math.min(1000 * 2 ** attempt, 8000)
+          const jitter = Math.random() * 400
+          await new Promise((resolve) => window.setTimeout(resolve, backoff + jitter))
         }
       }
     }
@@ -364,18 +372,47 @@ export async function importTransactionsFile(
     throw lastError
   }
 
-  const worker = async () => {
-    while (true) {
-      const chunkIndex = nextChunkIndex
-      nextChunkIndex += 1
-      if (chunkIndex >= totalChunks) {
-        return
-      }
-      await uploadChunk(chunkIndex)
+  // Upload in a handful of sweeps: any chunk that still fails after its own
+  // retries is requeued for the next sweep instead of aborting the whole
+  // upload outright. This keeps a burst of transient failures near the end of
+  // a large file from discarding everything that already succeeded.
+  const maxSweeps = 4
+  const concurrency = Math.min(2, totalChunks)
+  let pending = Array.from({ length: totalChunks }, (_, index) => index)
+  let lastFailure: unknown
+
+  for (let sweep = 0; sweep < maxSweeps && pending.length > 0; sweep += 1) {
+    if (sweep > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000 * sweep))
     }
+    const queue = [...pending]
+    const failedThisSweep: number[] = []
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const chunkIndex = queue.shift()
+        if (chunkIndex === undefined) {
+          return
+        }
+        try {
+          await uploadChunkOnce(chunkIndex)
+        } catch (error) {
+          lastFailure = error
+          failedThisSweep.push(chunkIndex)
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+    pending = failedThisSweep
   }
 
-  await Promise.all(Array.from({ length: Math.min(3, totalChunks) }, () => worker()))
+  if (pending.length > 0) {
+    throw lastFailure instanceof Error
+      ? lastFailure
+      : new Error(`Failed to upload ${pending.length} of ${totalChunks} chunk(s) after multiple attempts.`)
+  }
+
   await api.post(`/transactions/import-excel/uploads/${session.data.uploadId}/complete`, undefined, {
     timeout: 120000,
   })
