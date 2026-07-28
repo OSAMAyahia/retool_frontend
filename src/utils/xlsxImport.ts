@@ -166,14 +166,22 @@ function readWorkbook(file: File) {
   return file.arrayBuffer().then((content) => XLSX.read(content, { cellDates: true, dense: true }))
 }
 
-function buildTransactionId(row: ExcelRow, rowIndex: number) {
-  const transactionId = textAny(row, fieldAliases.transactionId)
-  const journal = textAny(row, fieldAliases.journal)
-  const account = textAny(row, fieldAliases.accountId)
-  const reference = textAny(row, fieldAliases.reference)
-  const base = transactionId || reference || journal || 'IMPORT'
-
-  return `${base}-${journal || 'JOURNAL'}-${account || 'ACCOUNT'}-${rowIndex}`
+// Deliberately built from business fields only (no row index): the same real transaction
+// line must hash to the same id regardless of which file or row position it appears at, or
+// re-uploading the same data (in a different row order, or as part of a bigger export) would
+// never be recognized as a duplicate. The date is included so genuinely distinct recurring
+// entries (the same recurring payment repeating every month, say) aren't collapsed together.
+// Matches the backend's stableTransactionId.
+function buildTransactionId(params: {
+  base: string
+  journal: string
+  account: string
+  debit: number | null
+  credit: number | null
+  date: string | null
+}) {
+  const { base, journal, account, debit, credit, date } = params
+  return `${base}-${journal}-${account}-${debit ?? ''}-${credit ?? ''}-${date ?? ''}`
     .replace(/\s+/g, '-')
     .replace(/[^A-Za-z0-9._-]/g, '-')
     .slice(0, 128)
@@ -203,17 +211,25 @@ function parseRow(row: ExcelRow, rowIndex: number): IngestTransactionPayload | n
   const analytic = textAny(row, fieldAliases.analytic)
   const distributions = distributionsAny(row, fieldAliases.distributions)
     ?? distributionsAny(row, fieldAliases.analytic)
+  const stableTransactionId = buildTransactionId({
+    base: originalTransactionId || reference || journal || 'IMPORT',
+    journal: journal || 'JOURNAL',
+    account: account || 'ACCOUNT',
+    debit,
+    credit,
+    date: journalDate,
+  })
 
   return {
     date: journalDate,
-    txn_id: originalTransactionId || buildTransactionId(row, rowIndex),
+    txn_id: originalTransactionId || stableTransactionId,
     journal_id: journal,
     account_number: account || null,
     amount,
     cr_dr: type === 'Debit' ? 'DR' : 'CR',
     value_date: date,
     created_at: dateAny(row, fieldAliases.createdAt),
-    transactionId: buildTransactionId(row, rowIndex),
+    transactionId: stableTransactionId,
     accountId: account,
     currency: 'SAR',
     type,
