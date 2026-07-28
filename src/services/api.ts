@@ -324,7 +324,7 @@ export async function importTransactionsFile(
     rowsProcessed?: number,
   ) => void,
 ): Promise<IngestSummaryResponse> {
-  const chunkSize = 2 * 1024 * 1024
+  const chunkSize = 5 * 1024 * 1024
   const totalChunks = Math.ceil(file.size / chunkSize)
   const session = await api.post<ImportUploadStatus>('/transactions/import-excel/uploads', {
     fileName: file.name,
