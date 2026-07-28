@@ -4,7 +4,7 @@
 
 - Node.js 22+
 - npm 10+
-- Backend API is proxied through `/api/v1` in production.
+- Backend API is configured with `VITE_API_BASE_URL` in production.
 
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
 
@@ -25,7 +25,7 @@ git push -uf origin main
 ## Integrate with your tools
 
 ```text
-VITE_API_BASE_URL=/api/v1
+VITE_API_BASE_URL=https://api.absat-erp.com/barq-corebanking/api/v1
 ```
 
 ## Collaborate with your team
@@ -53,7 +53,7 @@ Use the built-in continuous integration in GitLab.
 With the production base URL, the full endpoint is:
 
 ```text
-POST /api/v1/transactions/ingest
+POST https://api.absat-erp.com/barq-corebanking/api/v1/transactions/ingest
 ```
 
 Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
