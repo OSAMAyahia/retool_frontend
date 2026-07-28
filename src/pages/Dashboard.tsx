@@ -142,7 +142,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const excelInputRef = useRef<HTMLInputElement | null>(null)
   const csvInputRef = useRef<HTMLInputElement | null>(null)
-  const [filters, setFilters] = useState<TransactionFilters>({})
+  const [filters, setFilters] = useState<TransactionFilters>({ internalStatus: 'un-completed' })
   const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialTransactionsPage)
   const [journalRows, setJournalRows] = useState(0)
   const [sources, setSources] = useState<string[]>(fallbackSources)
@@ -712,7 +712,6 @@ export function Dashboard() {
     </main>
   )
 }
-
 
 
 
