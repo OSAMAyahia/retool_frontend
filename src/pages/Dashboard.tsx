@@ -406,7 +406,12 @@ export function Dashboard() {
     setActionError(null)
 
     try {
-      const result = await processJournals()
+      setActionMessage('Processing journal entries on the server…')
+      const result = await processJournals((status) => {
+        if (status === 'RUNNING') {
+          setActionMessage('Still processing journal entries on the server…')
+        }
+      })
       setActionMessage(`Journal processing created ${result.processed} balanced journal entries.`)
       await loadTransactions(false)
       await loadJournalCount()
