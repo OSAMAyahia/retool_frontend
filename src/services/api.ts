@@ -511,9 +511,39 @@ export async function getJournalById(transactionId: string): Promise<Journal> {
   return normalizeJournal(response.data)
 }
 
-export async function sendJournalsToOdoo(): Promise<ProcessingResponse> {
-  const response = await api.post<ProcessingResponse>('/journals/send-to-odoo')
-  return response.data
+// /journals/send-to-odoo now starts a background job for the same reason
+// /journals/process does (see processJournals above): a large backlog of entries, each
+// requiring its own external Odoo call, can take well past a reverse proxy's timeout.
+export async function sendJournalsToOdoo(
+  onProgress?: (status: 'RUNNING' | 'COMPLETED' | 'FAILED') => void,
+): Promise<ProcessingResponse> {
+  const start = await api.post<JournalProcessingStatus>('/journals/send-to-odoo')
+  const jobId = start.data.jobId
+  onProgress?.(start.data.status)
+
+  if (start.data.status === 'COMPLETED') {
+    return {
+      processed: start.data.processedEntries ?? 0,
+      processedAt: start.data.finishedAt ?? new Date().toISOString(),
+    }
+  }
+
+  for (let poll = 0; poll < 900; poll += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    const status = await api.get<JournalProcessingStatus>(`/journals/send-to-odoo/${jobId}`)
+    onProgress?.(status.data.status)
+    if (status.data.status === 'COMPLETED') {
+      return {
+        processed: status.data.processedEntries ?? 0,
+        processedAt: status.data.finishedAt ?? new Date().toISOString(),
+      }
+    }
+    if (status.data.status === 'FAILED') {
+      throw new Error(status.data.errorMessage || 'Sending journals to Odoo failed')
+    }
+  }
+
+  throw new Error('Sending journals to Odoo did not finish within 30 minutes')
 }
 
 export async function getTransactionById(transactionId: string): Promise<Transaction> {
