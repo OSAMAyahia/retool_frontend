@@ -23,6 +23,7 @@ import {
   updateAdminUser,
   updateTransactionStatus,
   type AdminConfig,
+  ODOO_JOURNAL_ENTRY_FIELD_OPTIONS,
   type AdminUser,
   type CreateUserPayload,
 } from '../services/api'
@@ -456,6 +457,39 @@ export function AdminPage() {
                   }
                 />
               </label>
+
+              <div className="grid gap-2 text-sm font-bold text-[#18234f]">
+                <span>Fields to send to Odoo</span>
+                <p className="text-xs font-normal text-[#6b7794]">
+                  Leave everything unchecked to send all optional fields (current behavior).
+                  Check specific fields to send only those.
+                </p>
+                <div className="grid gap-2">
+                  {ODOO_JOURNAL_ENTRY_FIELD_OPTIONS.map((option) => {
+                    const selected = config.odooJournalEntryFields ?? []
+                    const checked = selected.includes(option.key)
+                    return (
+                      <label key={option.key} className="flex items-center gap-2 text-sm font-normal text-[#18234f]">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) =>
+                            setConfig((current) => {
+                              const currentFields = current.odooJournalEntryFields ?? []
+                              const nextFields = event.target.checked
+                                ? [...currentFields, option.key]
+                                : currentFields.filter((field) => field !== option.key)
+                              return { ...current, odooJournalEntryFields: nextFields }
+                            })
+                          }
+                        />
+                        {option.label}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
               <button className={`${buttonClass} bg-[#2563eb] text-white hover:bg-[#1d4ed8]`} type="submit" disabled={isSaving}>
                 <Save className="h-5 w-5" aria-hidden="true" />
                 Save Config
