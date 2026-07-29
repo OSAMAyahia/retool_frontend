@@ -223,7 +223,12 @@ export function JournalPage() {
     }))
 
     try {
-      const result = await sendJournalsToOdoo()
+      setActionMessage('Sending journal entries to Odoo…')
+      const result = await sendJournalsToOdoo((status) => {
+        if (status === 'RUNNING') {
+          setActionMessage('Still sending journal entries to Odoo…')
+        }
+      })
       setActionMessage(
         `Sent ${result.processed} journal entries to Odoo. Rejected entries include the exact error and can be retried.`,
       )
@@ -414,7 +419,6 @@ export function JournalPage() {
     </main>
   )
 }
-
 
 
 

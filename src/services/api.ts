@@ -30,7 +30,18 @@ export interface AdminUser {
 export interface AdminConfig {
   odooMaxRetries: number
   odooRetryIntervalMinutes: number
+  // Empty/omitted = no restriction, send every optional field to Odoo (current default).
+  odooJournalEntryFields?: string[]
 }
+
+// Keys must match AdminConfigService.SELECTABLE_ODOO_JOURNAL_ENTRY_FIELDS on the backend.
+export const ODOO_JOURNAL_ENTRY_FIELD_OPTIONS: { key: string; label: string }[] = [
+  { key: 'ref', label: 'Reference (ref)' },
+  { key: 'date', label: 'Date' },
+  { key: 'post', label: 'Post' },
+  { key: 'line_name', label: 'Line name' },
+  { key: 'line_distributions', label: 'Line distributions' },
+]
 
 export interface LoginResponse {
   token: string
@@ -511,9 +522,39 @@ export async function getJournalById(transactionId: string): Promise<Journal> {
   return normalizeJournal(response.data)
 }
 
-export async function sendJournalsToOdoo(): Promise<ProcessingResponse> {
-  const response = await api.post<ProcessingResponse>('/journals/send-to-odoo')
-  return response.data
+// /journals/send-to-odoo now starts a background job for the same reason
+// /journals/process does (see processJournals above): a large backlog of entries, each
+// requiring its own external Odoo call, can take well past a reverse proxy's timeout.
+export async function sendJournalsToOdoo(
+  onProgress?: (status: 'RUNNING' | 'COMPLETED' | 'FAILED') => void,
+): Promise<ProcessingResponse> {
+  const start = await api.post<JournalProcessingStatus>('/journals/send-to-odoo')
+  const jobId = start.data.jobId
+  onProgress?.(start.data.status)
+
+  if (start.data.status === 'COMPLETED') {
+    return {
+      processed: start.data.processedEntries ?? 0,
+      processedAt: start.data.finishedAt ?? new Date().toISOString(),
+    }
+  }
+
+  for (let poll = 0; poll < 900; poll += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    const status = await api.get<JournalProcessingStatus>(`/journals/send-to-odoo/${jobId}`)
+    onProgress?.(status.data.status)
+    if (status.data.status === 'COMPLETED') {
+      return {
+        processed: status.data.processedEntries ?? 0,
+        processedAt: status.data.finishedAt ?? new Date().toISOString(),
+      }
+    }
+    if (status.data.status === 'FAILED') {
+      throw new Error(status.data.errorMessage || 'Sending journals to Odoo failed')
+    }
+  }
+
+  throw new Error('Sending journals to Odoo did not finish within 30 minutes')
 }
 
 export async function getTransactionById(transactionId: string): Promise<Transaction> {
@@ -588,7 +629,6 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
-
 
 
 
