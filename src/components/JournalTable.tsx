@@ -6,6 +6,9 @@ interface JournalTableProps {
   journals: Journal[]
   isLoading: boolean
   onSelect: (journal: Journal) => void
+  selectedIds: Set<string>
+  onToggleRow: (transactionId: string) => void
+  onToggleAll: () => void
 }
 
 const columns = journalColumnLabels
@@ -26,6 +29,9 @@ function LoadingRows() {
     <>
       {Array.from({ length: 6 }).map((_, rowIndex) => (
         <tr key={rowIndex} className="border-b border-[#edf1f8]">
+          <td className="h-[64px] px-5">
+            <div className="h-4 w-4 animate-pulse rounded bg-[#eef3fb]" />
+          </td>
           {columns.map((column) => (
             <td key={column} className="h-[64px] px-5">
               <div className="h-4 w-full max-w-28 animate-pulse rounded bg-[#eef3fb]" />
@@ -37,22 +43,34 @@ function LoadingRows() {
   )
 }
 
-export function JournalTable({ journals, isLoading, onSelect }: JournalTableProps) {
+export function JournalTable({ journals, isLoading, onSelect, selectedIds, onToggleRow, onToggleAll }: JournalTableProps) {
+  const allSelected = journals.length > 0 && journals.every((journal) => selectedIds.has(journal.transactionId))
+
   return (
     <div className="max-h-[720px] overflow-y-auto bg-white">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[13%]" />
-          <col className="w-[20%]" />
-          <col className="w-[13%]" />
+          <col className="w-[4%]" />
+          <col className="w-[12%]" />
+          <col className="w-[19%]" />
           <col className="w-[12%]" />
           <col className="w-[12%]" />
+          <col className="w-[11%]" />
           <col className="w-[8%]" />
           <col className="w-[11%]" />
           <col className="w-[11%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
+            <th className="h-12 whitespace-nowrap px-5 text-xs font-extrabold uppercase tracking-[0.04em]">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={onToggleAll}
+                aria-label="Select all visible journal entries"
+                disabled={journals.length === 0}
+              />
+            </th>
             {columns.map((column) => (
               <th key={column} className="h-12 whitespace-nowrap px-5 text-xs font-extrabold uppercase tracking-[0.04em]">
                 {column}
@@ -65,7 +83,7 @@ export function JournalTable({ journals, isLoading, onSelect }: JournalTableProp
             <LoadingRows />
           ) : journals.length === 0 ? (
             <tr>
-              <td className="px-5 py-14 text-center text-sm font-semibold text-[#657295]" colSpan={columns.length}>
+              <td className="px-5 py-14 text-center text-sm font-semibold text-[#657295]" colSpan={columns.length + 1}>
                 No balanced journal entries found.
               </td>
             </tr>
@@ -76,6 +94,14 @@ export function JournalTable({ journals, isLoading, onSelect }: JournalTableProp
                 className="cursor-pointer border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]"
                 onClick={() => onSelect(journal)}
               >
+                <td className="h-[64px] px-5 align-middle" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(journal.transactionId)}
+                    onChange={() => onToggleRow(journal.transactionId)}
+                    aria-label={`Select journal entry ${journal.transactionId}`}
+                  />
+                </td>
                 <td className="h-[64px] px-5 align-middle">
                   <span className="block truncate font-semibold text-[#2d3b68]">
                     {displayDate(journal.journalDate) || '-'}

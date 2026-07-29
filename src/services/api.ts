@@ -527,8 +527,14 @@ export async function getJournalById(transactionId: string): Promise<Journal> {
 // requiring its own external Odoo call, can take well past a reverse proxy's timeout.
 export async function sendJournalsToOdoo(
   onProgress?: (status: 'RUNNING' | 'COMPLETED' | 'FAILED') => void,
+  // Omitted/empty = no selection, send every eligible (NEW/REJECTED) entry (current default).
+  // Pass specific transaction ids to send only those.
+  transactionIds?: string[],
 ): Promise<ProcessingResponse> {
-  const start = await api.post<JournalProcessingStatus>('/journals/send-to-odoo')
+  const start = await api.post<JournalProcessingStatus>(
+    '/journals/send-to-odoo',
+    transactionIds && transactionIds.length > 0 ? { transactionIds } : undefined,
+  )
   const jobId = start.data.jobId
   onProgress?.(start.data.status)
 

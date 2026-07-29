@@ -149,12 +149,46 @@ export function JournalPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const summary = useMemo(() => buildJournalSummary(journalsPage), [journalsPage])
   const sendableJournalCount = useMemo(
     () => journalsPage.content.filter((journal) => odooSendableStatuses.has(journal.status)).length,
     [journalsPage.content],
   )
+  const selectedSendableIds = useMemo(
+    () =>
+      journalsPage.content
+        .filter((journal) => selectedIds.has(journal.transactionId) && odooSendableStatuses.has(journal.status))
+        .map((journal) => journal.transactionId),
+    [journalsPage.content, selectedIds],
+  )
+
+  const handleToggleRow = (transactionId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(transactionId)) {
+        next.delete(transactionId)
+      } else {
+        next.add(transactionId)
+      }
+      return next
+    })
+  }
+
+  const handleToggleAll = () => {
+    setSelectedIds((current) => {
+      const allSelected = journalsPage.content.every((journal) => current.has(journal.transactionId))
+      if (allSelected) {
+        const next = new Set(current)
+        journalsPage.content.forEach((journal) => next.delete(journal.transactionId))
+        return next
+      }
+      const next = new Set(current)
+      journalsPage.content.forEach((journal) => next.add(journal.transactionId))
+      return next
+    })
+  }
 
   const journalOptions = useMemo(
     () => Array.from(new Set(journalsPage.content.map((journal) => journal.journal).filter(Boolean))) as string[],
@@ -210,28 +244,37 @@ export function JournalPage() {
   }
 
   const handleSendToOdoo = async () => {
+    // Empty selection = no rows checked, keep the old "send everything eligible" behavior.
+    const transactionIds = selectedSendableIds.length > 0 ? selectedSendableIds : undefined
+    const targetIds = transactionIds ? new Set(transactionIds) : null
+
     setIsActionLoading(true)
     setActionMessage(null)
     setActionError(null)
     setJournalsPage((current) => ({
       ...current,
       content: current.content.map((journal) => (
-        odooSendableStatuses.has(journal.status)
+        odooSendableStatuses.has(journal.status) && (targetIds === null || targetIds.has(journal.transactionId))
           ? { ...journal, status: 'PROCESSING', errorMessage: null }
           : journal
       )),
     }))
 
     try {
-      setActionMessage('Sending journal entries to Odoo…')
+      setActionMessage(
+        transactionIds
+          ? `Sending ${transactionIds.length} selected journal entries to Odoo…`
+          : 'Sending journal entries to Odoo…',
+      )
       const result = await sendJournalsToOdoo((status) => {
         if (status === 'RUNNING') {
           setActionMessage('Still sending journal entries to Odoo…')
         }
-      })
+      }, transactionIds)
       setActionMessage(
         `Sent ${result.processed} journal entries to Odoo. Rejected entries include the exact error and can be retried.`,
       )
+      setSelectedIds(new Set())
       await loadJournals(false)
     } catch (error) {
       await loadJournals(false)
@@ -318,13 +361,15 @@ export function JournalPage() {
               onClick={() => void handleSendToOdoo()}
               disabled={isActionLoading}
               title={
-                sendableJournalCount > 0
-                  ? `${sendableJournalCount} visible new or rejected journal entries can be sent to Odoo`
-                  : 'Send all eligible journal entries'
+                selectedSendableIds.length > 0
+                  ? `Send ${selectedSendableIds.length} selected journal entries to Odoo`
+                  : sendableJournalCount > 0
+                    ? `${sendableJournalCount} visible new or rejected journal entries can be sent to Odoo`
+                    : 'Send all eligible journal entries'
               }
             >
               <Send className="h-4 w-4" aria-hidden="true" />
-              Send to Odoo
+              {selectedSendableIds.length > 0 ? `Send Selected (${selectedSendableIds.length})` : 'Send to Odoo'}
             </button>
             <button
               className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
@@ -384,7 +429,14 @@ export function JournalPage() {
         </div>
 
         <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          <JournalTable journals={journalsPage.content} isLoading={isLoading} onSelect={handleSelectJournal} />
+          <JournalTable
+            journals={journalsPage.content}
+            isLoading={isLoading}
+            onSelect={handleSelectJournal}
+            selectedIds={selectedIds}
+            onToggleRow={handleToggleRow}
+            onToggleAll={handleToggleAll}
+          />
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
             <span>
               Showing {journalsPage.content.length} of {journalsPage.totalElements} journal entries
