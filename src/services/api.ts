@@ -259,6 +259,47 @@ export async function getTransactions(
   return normalizeTransactionPage(response.data)
 }
 
+export interface TransactionGroupSummary {
+  valueDate: string | null
+  accountId: string
+  type: string
+  totalAmount: number
+  recordCount: number
+}
+
+// Grouped across the WHOLE filtered dataset in the database (value_date + account_id + type,
+// amounts summed), not just the current page - see /transactions/grouped on the backend. Used
+// by the Dashboard table so "Total Transactions" isn't undercounted to whatever page size the
+// UI happens to be showing.
+export async function getTransactionGroups(
+  filters: TransactionFilters,
+  page: number,
+  size: number,
+): Promise<PageResponse<TransactionGroupSummary>> {
+  const response = await api.get<BackendPage<TransactionGroupSummary>>('/transactions/grouped', {
+    params: {
+      page,
+      size,
+      internalStatus: filters.internalStatus || undefined,
+      source: filters.source || undefined,
+      accountId: filters.accountId || undefined,
+      dateFrom: toDateTimeFrom(filters.dateFrom),
+      dateTo: toDateTimeTo(filters.dateTo),
+    },
+  })
+
+  const data = response.data
+  const content = data.content ?? []
+
+  return {
+    content,
+    page: data.page ?? data.number ?? 0,
+    size: data.size ?? content.length,
+    totalElements: data.totalElements ?? content.length,
+    totalPages: data.totalPages ?? (content.length > 0 ? 1 : 0),
+  }
+}
+
 function createEmptyIngestSummary(): IngestSummaryResponse {
   return {
     received: 0,

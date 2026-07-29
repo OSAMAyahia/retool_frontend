@@ -1,17 +1,20 @@
 import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import type { TransactionGroupSummary } from '../services/api'
 import type { Transaction } from '../types/transaction'
-import type { TransactionGroup } from '../utils/groupTransactions'
 import { displayDate, transactionCrDr, transactionJournalId } from '../utils/tableFields'
 import { StatusBadge } from './StatusBadge'
 
 interface TransactionDetailPanelProps {
   transaction: Transaction | null
-  // When the user clicks a merged/grouped row in the Dashboard table (multiple raw legs
-  // combined under the same value_date + account_number + Debit/Credit), this is set instead
-  // of `transaction` - the panel shows the list of underlying rows rather than one row's
+  // When the user clicks a merged/grouped row in the Dashboard table (a value_date +
+  // account_number + Debit/Credit group, possibly combining several raw legs), this is set
+  // instead of `transaction` - the panel shows the list of underlying rows (fetched
+  // separately, since the group itself is just a server-side aggregate) rather than one row's
   // fields. Clicking one of those rows drills into the normal single-transaction view.
-  group: TransactionGroup | null
+  group: TransactionGroupSummary | null
+  groupMembers: Transaction[]
+  isLoadingGroupMembers: boolean
   isRetrying: boolean
   retryMessage: string | null
   retryError: string | null
@@ -50,6 +53,8 @@ function formatDate(value: string | null) {
 export function TransactionDetailPanel({
   transaction,
   group,
+  groupMembers,
+  isLoadingGroupMembers,
   isRetrying,
   retryMessage,
   retryError,
@@ -72,10 +77,10 @@ export function TransactionDetailPanel({
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="truncate text-lg font-semibold text-slate-950">
-                  {group.transactions.length} merged rows
+                  {group.recordCount} merged row{group.recordCount === 1 ? '' : 's'}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {group.accountId} · {group.crDr} · {displayDate(group.valueDate) || 'No date'} · total{' '}
+                  {group.accountId} · {group.type} · {displayDate(group.valueDate) || 'No date'} · total{' '}
                   {formatGroupAmount(group.totalAmount)}
                 </p>
               </div>
@@ -95,29 +100,41 @@ export function TransactionDetailPanel({
               These rows share the same value date, account, and Debit/Credit direction, so they'll be
               combined into one line when sent to Odoo. Click any row below to see its full details.
             </p>
-            <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200">
-              {group.transactions.map((item) => (
-                <li key={item.transactionId}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
-                    onClick={() => onSelectFromGroup(item)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-mono text-sm font-semibold text-slate-900">
-                        {item.transactionId}
+            {isLoadingGroupMembers ? (
+              <div className="grid gap-2">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-14 animate-pulse rounded-lg bg-slate-100" />
+                ))}
+              </div>
+            ) : groupMembers.length === 0 ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                Could not load the underlying rows for this group.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200">
+                {groupMembers.map((item) => (
+                  <li key={item.transactionId}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                      onClick={() => onSelectFromGroup(item)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-mono text-sm font-semibold text-slate-900">
+                          {item.transactionId}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          journal {transactionJournalId(item) || '-'} · {transactionCrDr(item)}
+                        </span>
                       </span>
-                      <span className="mt-0.5 block text-xs text-slate-500">
-                        journal {transactionJournalId(item) || '-'} · {transactionCrDr(item)}
+                      <span className="shrink-0 font-mono text-sm font-bold text-slate-900">
+                        {formatGroupAmount(item.amount)}
                       </span>
-                    </span>
-                    <span className="shrink-0 font-mono text-sm font-bold text-slate-900">
-                      {formatGroupAmount(item.amount)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>

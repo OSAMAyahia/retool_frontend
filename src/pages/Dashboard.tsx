@@ -23,15 +23,16 @@ import {
   getJournals,
   getSources,
   getTransactionById,
+  getTransactionGroups,
   getTransactions,
   importTransactionsFile,
   ingestTransactions,
   processJournals,
   retryTransaction,
+  type TransactionGroupSummary,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import { parseExcelToTransactions } from '../utils/xlsxImport'
-import type { TransactionGroup } from '../utils/groupTransactions'
 import {
   dashboardColumnLabels,
   displayDate,
@@ -50,6 +51,14 @@ import type {
 } from '../types/transaction'
 
 const initialTransactionsPage: PageResponse<Transaction> = {
+  content: [],
+  page: 0,
+  size: 10,
+  totalElements: 0,
+  totalPages: 0,
+}
+
+const initialGroupsPage: PageResponse<TransactionGroupSummary> = {
   content: [],
   page: 0,
   size: 10,
@@ -145,10 +154,14 @@ export function Dashboard() {
   const csvInputRef = useRef<HTMLInputElement | null>(null)
   const [filters, setFilters] = useState<TransactionFilters>({ internalStatus: 'un-completed' })
   const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialTransactionsPage)
+  const [groupsPage, setGroupsPage] = useState<PageResponse<TransactionGroupSummary>>(initialGroupsPage)
+  const [isGroupsLoading, setIsGroupsLoading] = useState(true)
   const [journalRows, setJournalRows] = useState(0)
   const [sources, setSources] = useState<string[]>(fallbackSources)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<TransactionGroup | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<TransactionGroupSummary | null>(null)
+  const [groupMembers, setGroupMembers] = useState<Transaction[]>([])
+  const [isLoadingGroupMembers, setIsLoadingGroupMembers] = useState(false)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
   const [isLoading, setIsLoading] = useState(true)
@@ -187,6 +200,29 @@ export function Dashboard() {
     [filters, page, size],
   )
 
+  // Grouped by value_date + account_id + type across the WHOLE filtered dataset in the
+  // database (see /transactions/grouped) - this is what the Dashboard table actually renders.
+  // Kept separate from loadTransactions above (which still feeds the summary card totals)
+  // since grouping only makes sense evaluated over everything matching the filters, not
+  // whatever single page loadTransactions happens to have fetched.
+  const loadTransactionGroups = useCallback(
+    async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
+      if (showLoading) {
+        setIsGroupsLoading(true)
+      }
+
+      try {
+        const response = await getTransactionGroups(overrideFilters ?? filters, overridePage ?? page, size)
+        setGroupsPage(response)
+      } catch {
+        setGroupsPage(initialGroupsPage)
+      } finally {
+        setIsGroupsLoading(false)
+      }
+    },
+    [filters, page, size],
+  )
+
   const loadJournalCount = useCallback(async () => {
     try {
       const response: PageResponse<Journal> = await getJournals({}, 0, 1)
@@ -199,11 +235,12 @@ export function Dashboard() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadTransactions()
+      void loadTransactionGroups()
       void loadJournalCount()
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [loadJournalCount, loadTransactions])
+  }, [loadJournalCount, loadTransactionGroups, loadTransactions])
 
   useEffect(() => {
     if (!autoRefresh) {
@@ -212,10 +249,11 @@ export function Dashboard() {
 
     const timer = window.setInterval(() => {
       void loadTransactions(false)
+      void loadTransactionGroups(false)
     }, 15000)
 
     return () => window.clearInterval(timer)
-  }, [autoRefresh, loadTransactions])
+  }, [autoRefresh, loadTransactionGroups, loadTransactions])
 
   useEffect(() => {
     async function loadMetadata() {
@@ -235,7 +273,7 @@ export function Dashboard() {
     [journalRows, transactionsPage],
   )
   const canGoBack = page > 0
-  const canGoForward = transactionsPage.totalPages > 0 && page + 1 < transactionsPage.totalPages
+  const canGoForward = groupsPage.totalPages > 0 && page + 1 < groupsPage.totalPages
 
   const handleFiltersChange = (nextFilters: TransactionFilters) => {
     setFilters(nextFilters)
@@ -266,9 +304,35 @@ export function Dashboard() {
     }
   }
 
-  const handleSelectGroup = (group: TransactionGroup) => {
+  const handleSelectGroup = async (group: TransactionGroupSummary) => {
     setSelectedTransaction(null)
     setSelectedGroup(group)
+    setGroupMembers([])
+    setIsLoadingGroupMembers(true)
+
+    try {
+      const response = await getTransactions(
+        {
+          ...filters,
+          accountId: group.accountId,
+          dateFrom: group.valueDate ? group.valueDate.slice(0, 10) : undefined,
+          dateTo: group.valueDate ? group.valueDate.slice(0, 10) : undefined,
+        },
+        0,
+        200,
+      )
+      // The accountId filter above is a partial (LIKE) match on the backend, so narrow to an
+      // exact account + Debit/Credit match here to guarantee only this group's real members
+      // are shown, even if another account number happens to contain this one as a substring.
+      const members = response.content.filter(
+        (item) => item.accountId === group.accountId && (transactionCrDr(item) ?? '') === group.type,
+      )
+      setGroupMembers(members)
+    } catch {
+      setGroupMembers([])
+    } finally {
+      setIsLoadingGroupMembers(false)
+    }
   }
 
   const handleRetry = async (transaction: Transaction) => {
@@ -285,6 +349,7 @@ export function Dashboard() {
       }
 
       await loadTransactions(false)
+      await loadTransactionGroups(false)
     } catch (retryRequestError) {
       setRetryError(`Retry failed. ${getApiErrorMessage(retryRequestError)}`)
     } finally {
@@ -329,6 +394,7 @@ export function Dashboard() {
         setFilters({})
         setPage(0)
         await loadTransactions(false, {}, 0)
+        await loadTransactionGroups(false, {}, 0)
         await loadJournalCount()
         return
       }
@@ -400,6 +466,7 @@ export function Dashboard() {
       }
 
       await loadTransactions(false, nextFilters, 0)
+      await loadTransactionGroups(false, nextFilters, 0)
       await loadJournalCount()
     } catch (importError) {
       setActionError(`Import failed. ${getApiErrorMessage(importError)}`)
@@ -422,6 +489,7 @@ export function Dashboard() {
       })
       setActionMessage(`Journal processing created ${result.processed} balanced journal entries.`)
       await loadTransactions(false)
+      await loadTransactionGroups(false)
       await loadJournalCount()
     } catch (processError) {
       setActionError(`Journal processing failed. ${getApiErrorMessage(processError)}`)
@@ -509,6 +577,7 @@ export function Dashboard() {
               type="button"
               onClick={() => {
                 void loadTransactions()
+                void loadTransactionGroups()
                 void loadJournalCount()
               }}
               disabled={isLoading}
@@ -557,7 +626,10 @@ export function Dashboard() {
             autoRefresh={autoRefresh}
             isLoading={isLoading}
             onFiltersChange={handleFiltersChange}
-            onRefresh={() => void loadTransactions()}
+            onRefresh={() => {
+              void loadTransactions()
+              void loadTransactionGroups()
+            }}
             onAutoRefreshChange={setAutoRefresh}
             onReset={handleResetFilters}
           />
@@ -649,17 +721,16 @@ export function Dashboard() {
 
         <div className="mt-3 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
           <TransactionTable
-            transactions={transactionsPage.content}
-            isLoading={isLoading}
-            onSelect={handleSelectTransaction}
-            onSelectGroup={handleSelectGroup}
+            groups={groupsPage.content}
+            isLoading={isGroupsLoading}
+            onSelectGroup={(group) => void handleSelectGroup(group)}
           />
 
           <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
             <div>
-              Showing {transactionsPage.content.length === 0 ? 0 : page * size + 1} to{' '}
-              {Math.min((page + 1) * size, transactionsPage.totalElements)} of{' '}
-              {transactionsPage.totalElements} results
+              Showing {groupsPage.content.length === 0 ? 0 : page * size + 1} to{' '}
+              {Math.min((page + 1) * size, groupsPage.totalElements)} of{' '}
+              {groupsPage.totalElements} grouped rows
             </div>
             <div className="flex items-center gap-3">
               <select
@@ -686,7 +757,7 @@ export function Dashboard() {
                 <ChevronLeft className="h-5 w-5" aria-hidden="true" />
               </button>
               <strong className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#7354ff] to-[#563cee] text-white shadow-[0_10px_18px_rgba(88,58,235,0.22)]">
-                {transactionsPage.totalPages === 0 ? 0 : page + 1}
+                {groupsPage.totalPages === 0 ? 0 : page + 1}
               </strong>
               <button
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
@@ -718,6 +789,8 @@ export function Dashboard() {
       <TransactionDetailPanel
         transaction={selectedTransaction}
         group={selectedGroup}
+        groupMembers={groupMembers}
+        isLoadingGroupMembers={isLoadingGroupMembers}
         isRetrying={isRetrying}
         retryMessage={retryMessage}
         retryError={retryError}
