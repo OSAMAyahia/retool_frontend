@@ -441,9 +441,49 @@ export async function importTransactionsFile(
   throw new Error('Large-file processing did not finish within 30 minutes')
 }
 
-export async function processJournals(): Promise<ProcessingResponse> {
-  const response = await api.post<ProcessingResponse>('/journals/process')
-  return response.data
+interface JournalProcessingStatus {
+  jobId: string
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  processedEntries: number | null
+  startedAt: string
+  finishedAt: string | null
+  errorMessage: string | null
+}
+
+// /journals/process now starts a background job and returns immediately instead of blocking
+// until the whole backlog is processed - a large backlog could otherwise take well past a
+// reverse proxy's timeout and come back as a 504 even though the backend kept working. This
+// polls the job to completion so callers can keep the same "await processJournals()" shape.
+export async function processJournals(
+  onProgress?: (status: 'RUNNING' | 'COMPLETED' | 'FAILED') => void,
+): Promise<ProcessingResponse> {
+  const start = await api.post<JournalProcessingStatus>('/journals/process')
+  const jobId = start.data.jobId
+  onProgress?.(start.data.status)
+
+  if (start.data.status === 'COMPLETED') {
+    return {
+      processed: start.data.processedEntries ?? 0,
+      processedAt: start.data.finishedAt ?? new Date().toISOString(),
+    }
+  }
+
+  for (let poll = 0; poll < 900; poll += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    const status = await api.get<JournalProcessingStatus>(`/journals/process/${jobId}`)
+    onProgress?.(status.data.status)
+    if (status.data.status === 'COMPLETED') {
+      return {
+        processed: status.data.processedEntries ?? 0,
+        processedAt: status.data.finishedAt ?? new Date().toISOString(),
+      }
+    }
+    if (status.data.status === 'FAILED') {
+      throw new Error(status.data.errorMessage || 'Journal processing failed')
+    }
+  }
+
+  throw new Error('Journal processing did not finish within 30 minutes')
 }
 
 export async function getJournals(
