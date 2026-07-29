@@ -1,15 +1,30 @@
 import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Transaction } from '../types/transaction'
+import type { TransactionGroup } from '../utils/groupTransactions'
+import { displayDate, transactionCrDr, transactionJournalId } from '../utils/tableFields'
 import { StatusBadge } from './StatusBadge'
 
 interface TransactionDetailPanelProps {
   transaction: Transaction | null
+  // When the user clicks a merged/grouped row in the Dashboard table (multiple raw legs
+  // combined under the same value_date + account_number + Debit/Credit), this is set instead
+  // of `transaction` - the panel shows the list of underlying rows rather than one row's
+  // fields. Clicking one of those rows drills into the normal single-transaction view.
+  group: TransactionGroup | null
   isRetrying: boolean
   retryMessage: string | null
   retryError: string | null
   onClose: () => void
   onRetry: (transaction: Transaction) => void
+  onSelectFromGroup: (transaction: Transaction) => void
+}
+
+function formatGroupAmount(amount: number) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
 }
 
 function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -34,11 +49,13 @@ function formatDate(value: string | null) {
 
 export function TransactionDetailPanel({
   transaction,
+  group,
   isRetrying,
   retryMessage,
   retryError,
   onClose,
   onRetry,
+  onSelectFromGroup,
 }: TransactionDetailPanelProps) {
   const [rawOpen, setRawOpen] = useState(false)
 
@@ -46,6 +63,66 @@ export function TransactionDetailPanel({
     const payload = transaction?.rawPayload ?? transaction
     return JSON.stringify(payload, null, 2)
   }, [transaction])
+
+  if (!transaction && group) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-950/30" role="dialog" aria-modal="true">
+        <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-white shadow-2xl">
+          <header className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold text-slate-950">
+                  {group.transactions.length} merged rows
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {group.accountId} · {group.crDr} · {displayDate(group.valueDate) || 'No date'} · total{' '}
+                  {formatGroupAmount(group.totalAmount)}
+                </p>
+              </div>
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                type="button"
+                onClick={onClose}
+                aria-label="Close detail panel"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            <p className="mb-3 text-xs font-medium text-slate-500">
+              These rows share the same value date, account, and Debit/Credit direction, so they'll be
+              combined into one line when sent to Odoo. Click any row below to see its full details.
+            </p>
+            <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200">
+              {group.transactions.map((item) => (
+                <li key={item.transactionId}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                    onClick={() => onSelectFromGroup(item)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-mono text-sm font-semibold text-slate-900">
+                        {item.transactionId}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        journal {transactionJournalId(item) || '-'} · {transactionCrDr(item)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-sm font-bold text-slate-900">
+                      {formatGroupAmount(item.amount)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!transaction) {
     return null

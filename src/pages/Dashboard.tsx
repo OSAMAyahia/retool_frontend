@@ -31,6 +31,7 @@ import {
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import { parseExcelToTransactions } from '../utils/xlsxImport'
+import type { TransactionGroup } from '../utils/groupTransactions'
 import {
   dashboardColumnLabels,
   displayDate,
@@ -147,6 +148,7 @@ export function Dashboard() {
   const [journalRows, setJournalRows] = useState(0)
   const [sources, setSources] = useState<string[]>(fallbackSources)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<TransactionGroup | null>(null)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
   const [isLoading, setIsLoading] = useState(true)
@@ -251,6 +253,7 @@ export function Dashboard() {
   }
 
   const handleSelectTransaction = async (transaction: Transaction) => {
+    setSelectedGroup(null)
     setSelectedTransaction(transaction)
     setRetryMessage(null)
     setRetryError(null)
@@ -261,6 +264,11 @@ export function Dashboard() {
     } catch {
       setSelectedTransaction(transaction)
     }
+  }
+
+  const handleSelectGroup = (group: TransactionGroup) => {
+    setSelectedTransaction(null)
+    setSelectedGroup(group)
   }
 
   const handleRetry = async (transaction: Transaction) => {
@@ -644,6 +652,7 @@ export function Dashboard() {
             transactions={transactionsPage.content}
             isLoading={isLoading}
             onSelect={handleSelectTransaction}
+            onSelectGroup={handleSelectGroup}
           />
 
           <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
@@ -708,11 +717,16 @@ export function Dashboard() {
       ) : null}
       <TransactionDetailPanel
         transaction={selectedTransaction}
+        group={selectedGroup}
         isRetrying={isRetrying}
         retryMessage={retryMessage}
         retryError={retryError}
-        onClose={() => setSelectedTransaction(null)}
+        onClose={() => {
+          setSelectedTransaction(null)
+          setSelectedGroup(null)
+        }}
         onRetry={handleRetry}
+        onSelectFromGroup={(transaction) => void handleSelectTransaction(transaction)}
       />
     </main>
   )
