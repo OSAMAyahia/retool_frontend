@@ -34,13 +34,14 @@ export interface AdminConfig {
   odooJournalEntryFields?: string[]
 }
 
-// Keys must match AdminConfigService.SELECTABLE_ODOO_JOURNAL_ENTRY_FIELDS on the backend.
+// Keys must match AdminConfigService.SELECTABLE_ODOO_JOURNAL_ENTRY_FIELDS on the backend. Only
+// these 3 fields are actually optional in the real POST /api/journal-entry/create contract -
+// there's no journal_name/post/distributions field to toggle, since Odoo resolves those from
+// core.banking.mapping.table by account_number.
 export const ODOO_JOURNAL_ENTRY_FIELD_OPTIONS: { key: string; label: string }[] = [
   { key: 'ref', label: 'Reference (ref)' },
-  { key: 'date', label: 'Date' },
-  { key: 'post', label: 'Post' },
+  { key: 'value_date', label: 'Value date' },
   { key: 'line_name', label: 'Line name' },
-  { key: 'line_distributions', label: 'Line distributions' },
 ]
 
 export interface LoginResponse {
