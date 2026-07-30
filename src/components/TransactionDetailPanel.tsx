@@ -39,16 +39,43 @@ function Field({ label, value }: { label: string; value: string | number | null 
   )
 }
 
-function formatDate(value: string | null) {
+// Formats using the raw stored value's own date/time components (UTC getters), never the
+// browser's local timezone, so the value on screen always matches what's stored - no shifting.
+function pad(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function formatDateOnly(value: string | null) {
   if (!value) {
     return null
   }
 
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-    timeZone: 'UTC',
-  }).format(new Date(value))
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  const hours24 = date.getUTCHours()
+  const period = hours24 >= 12 ? 'PM' : 'AM'
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12
+
+  const datePart = `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`
+  const timePart = `${hours12}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} ${period}`
+
+  return `${datePart} ${timePart}`
 }
 
 export function TransactionDetailPanel({
@@ -180,9 +207,9 @@ export function TransactionDetailPanel({
             <Field label="Source Status" value={transaction.sourceStatus} />
             <Field label="Retry Count" value={transaction.retryCount} />
             <Field label="Odoo Reference ID" value={transaction.odooReferenceId} />
-            <Field label="Value Date" value={formatDate(transaction.valueDate)} />
-            <Field label="Created At" value={formatDate(transaction.createdAt)} />
-            <Field label="Updated At" value={formatDate(transaction.updatedAt)} />
+            <Field label="Value Date" value={formatDateOnly(transaction.valueDate)} />
+            <Field label="Created At" value={formatDateTime(transaction.createdAt)} />
+            <Field label="Updated At" value={formatDateTime(transaction.updatedAt)} />
           </dl>
 
           {transaction.lastError ? (

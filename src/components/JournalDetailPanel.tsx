@@ -17,16 +17,43 @@ function Field({ label, value }: { label: string; value: string | number | null 
   )
 }
 
-function formatDate(value: string | null) {
+// Formats using the raw stored value's own date/time components (UTC getters), never the
+// browser's local timezone, so the value on screen always matches what's stored - no shifting.
+function pad(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function formatDateOnly(value: string | null) {
   if (!value) {
     return null
   }
 
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-    timeZone: 'UTC',
-  }).format(new Date(value))
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  const hours24 = date.getUTCHours()
+  const period = hours24 >= 12 ? 'PM' : 'AM'
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12
+
+  const datePart = `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`
+  const timePart = `${hours12}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} ${period}`
+
+  return `${datePart} ${timePart}`
 }
 
 function formatMoney(value: number | null) {
@@ -90,13 +117,13 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
 
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="txn_id" value={journal.transactionId} />
-            <Field label="Journal Date" value={formatDate(journal.journalDate)} />
+            <Field label="Journal Date" value={formatDateOnly(journal.journalDate)} />
             <Field label="Journal" value={journal.journal} />
             <Field label="Reference" value={journal.reference} />
             <Field label="Total Debit" value={formatMoney(journal.totalDebit)} />
             <Field label="Total Credit" value={formatMoney(journal.totalCredit)} />
             <Field label="Odoo Reference ID" value={journal.odooReferenceId} />
-            <Field label="Updated At" value={formatDate(journal.updatedAt)} />
+            <Field label="Updated At" value={formatDateTime(journal.updatedAt)} />
           </dl>
 
           <section className="mt-5 overflow-hidden rounded-lg border border-slate-200">
