@@ -102,21 +102,18 @@ function getApiErrorMessage(error: unknown) {
   return 'Unknown error'
 }
 
-function buildSummary(page: PageResponse<Transaction>, journalRows: number): TransactionSummary {
-  return page.content.reduce(
-    (summary, transaction) => {
-      if (transaction.internalStatus === 'completed') {
-        summary.completed += 1
-      }
-
-      if (transaction.internalStatus === 'un-completed') {
-        summary.unCompleted += 1
-      }
-
-      return summary
-    },
-    { total: page.totalElements, completed: 0, unCompleted: 0, journalRows },
-  )
+// completed/unCompleted are counted independently of whatever filters the user currently has
+// applied on the table (via dedicated size=1 requests, reading only totalElements) - summary
+// cards should always reflect the true overall numbers, not just whatever page/filter happens
+// to be loaded (the Dashboard defaults to filtering to "un-completed" only, so building this
+// from the loaded page would always show 0 completed).
+function buildSummary(completed: number, unCompleted: number, journalRows: number): TransactionSummary {
+  return {
+    total: completed + unCompleted,
+    completed,
+    unCompleted,
+    journalRows,
+  }
 }
 
 type ExportFormat = 'excel' | 'csv'
@@ -178,6 +175,7 @@ export function Dashboard() {
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+  const [statusCounts, setStatusCounts] = useState({ completed: 0, unCompleted: 0 })
 
   const loadTransactions = useCallback(
     async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
@@ -202,7 +200,7 @@ export function Dashboard() {
 
   // Grouped by value_date + account_id + type across the WHOLE filtered dataset in the
   // database (see /transactions/grouped) - this is what the Dashboard table actually renders.
-  // Kept separate from loadTransactions above (which still feeds the summary card totals)
+  // Kept separate from loadTransactions above (which just backs the raw-row detail panel now)
   // since grouping only makes sense evaluated over everything matching the filters, not
   // whatever single page loadTransactions happens to have fetched.
   const loadTransactionGroups = useCallback(
@@ -232,15 +230,34 @@ export function Dashboard() {
     }
   }, [])
 
+  // Independent of `filters`/`page` on purpose - the summary cards should always show the true
+  // overall completed/not-completed counts, not whatever subset the table happens to be
+  // filtered/paginated to (the Dashboard defaults to filtering to "un-completed" only).
+  const loadTransactionStatusCounts = useCallback(async () => {
+    try {
+      const [completedResponse, unCompletedResponse] = await Promise.all([
+        getTransactions({ internalStatus: 'completed' }, 0, 1),
+        getTransactions({ internalStatus: 'un-completed' }, 0, 1),
+      ])
+      setStatusCounts({
+        completed: completedResponse.totalElements,
+        unCompleted: unCompletedResponse.totalElements,
+      })
+    } catch {
+      setStatusCounts({ completed: 0, unCompleted: 0 })
+    }
+  }, [])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadTransactions()
       void loadTransactionGroups()
+      void loadTransactionStatusCounts()
       void loadJournalCount()
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [loadJournalCount, loadTransactionGroups, loadTransactions])
+  }, [loadJournalCount, loadTransactionGroups, loadTransactionStatusCounts, loadTransactions])
 
   useEffect(() => {
     if (!autoRefresh) {
@@ -250,10 +267,11 @@ export function Dashboard() {
     const timer = window.setInterval(() => {
       void loadTransactions(false)
       void loadTransactionGroups(false)
+      void loadTransactionStatusCounts()
     }, 15000)
 
     return () => window.clearInterval(timer)
-  }, [autoRefresh, loadTransactionGroups, loadTransactions])
+  }, [autoRefresh, loadTransactionGroups, loadTransactionStatusCounts, loadTransactions])
 
   useEffect(() => {
     async function loadMetadata() {
@@ -269,8 +287,8 @@ export function Dashboard() {
   }, [])
 
   const summary = useMemo(
-    () => buildSummary(transactionsPage, journalRows),
-    [journalRows, transactionsPage],
+    () => buildSummary(statusCounts.completed, statusCounts.unCompleted, journalRows),
+    [journalRows, statusCounts],
   )
   const canGoBack = page > 0
   const canGoForward = groupsPage.totalPages > 0 && page + 1 < groupsPage.totalPages
@@ -350,6 +368,7 @@ export function Dashboard() {
 
       await loadTransactions(false)
       await loadTransactionGroups(false)
+      await loadTransactionStatusCounts()
     } catch (retryRequestError) {
       setRetryError(`Retry failed. ${getApiErrorMessage(retryRequestError)}`)
     } finally {
@@ -395,6 +414,7 @@ export function Dashboard() {
         setPage(0)
         await loadTransactions(false, {}, 0)
         await loadTransactionGroups(false, {}, 0)
+        await loadTransactionStatusCounts()
         await loadJournalCount()
         return
       }
@@ -467,6 +487,7 @@ export function Dashboard() {
 
       await loadTransactions(false, nextFilters, 0)
       await loadTransactionGroups(false, nextFilters, 0)
+      await loadTransactionStatusCounts()
       await loadJournalCount()
     } catch (importError) {
       setActionError(`Import failed. ${getApiErrorMessage(importError)}`)
@@ -490,6 +511,7 @@ export function Dashboard() {
       setActionMessage(`Journal processing created ${result.processed} balanced journal entries.`)
       await loadTransactions(false)
       await loadTransactionGroups(false)
+      await loadTransactionStatusCounts()
       await loadJournalCount()
     } catch (processError) {
       setActionError(`Journal processing failed. ${getApiErrorMessage(processError)}`)
@@ -578,6 +600,7 @@ export function Dashboard() {
               onClick={() => {
                 void loadTransactions()
                 void loadTransactionGroups()
+                void loadTransactionStatusCounts()
                 void loadJournalCount()
               }}
               disabled={isLoading}
@@ -629,6 +652,7 @@ export function Dashboard() {
             onRefresh={() => {
               void loadTransactions()
               void loadTransactionGroups()
+              void loadTransactionStatusCounts()
             }}
             onAutoRefreshChange={setAutoRefresh}
             onReset={handleResetFilters}

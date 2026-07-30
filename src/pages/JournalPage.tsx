@@ -89,15 +89,17 @@ const journalStatuses: TransactionStatus[] = [
 
 const odooSendableStatuses = new Set(['NEW', 'REJECTED'])
 
-function buildJournalSummary(page: PageResponse<Journal>): TransactionSummary {
-  const sent = page.content.filter((journal) => journal.status === 'SENT').length
-  const unCompleted = Math.max(page.totalElements - sent, 0)
+// total/sent are counted independently of whatever filters the user currently has applied on
+// the table (via dedicated size=1 requests, reading only totalElements) - summary cards should
+// always reflect the true overall numbers, not just whatever page/filter happens to be loaded.
+function buildJournalSummary(total: number, sent: number): TransactionSummary {
+  const unCompleted = Math.max(total - sent, 0)
 
   return {
-    total: page.totalElements,
+    total,
     completed: sent,
     unCompleted,
-    journalRows: page.totalElements,
+    journalRows: total,
   }
 }
 
@@ -150,8 +152,12 @@ export function JournalPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [statusCounts, setStatusCounts] = useState({ total: 0, sent: 0 })
 
-  const summary = useMemo(() => buildJournalSummary(journalsPage), [journalsPage])
+  const summary = useMemo(
+    () => buildJournalSummary(statusCounts.total, statusCounts.sent),
+    [statusCounts],
+  )
   const sendableJournalCount = useMemo(
     () => journalsPage.content.filter((journal) => odooSendableStatuses.has(journal.status)).length,
     [journalsPage.content],
@@ -216,6 +222,20 @@ export function JournalPage() {
     [filters, page],
   )
 
+  // Independent of `filters`/`page` on purpose - the summary cards should always show the true
+  // overall counts, not whatever subset the table happens to be filtered/paginated to.
+  const loadStatusCounts = useCallback(async () => {
+    try {
+      const [totalResponse, sentResponse] = await Promise.all([
+        getJournals({}, 0, 1),
+        getJournals({ internalStatus: 'SENT' }, 0, 1),
+      ])
+      setStatusCounts({ total: totalResponse.totalElements, sent: sentResponse.totalElements })
+    } catch {
+      setStatusCounts({ total: 0, sent: 0 })
+    }
+  }, [])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadJournals()
@@ -223,6 +243,10 @@ export function JournalPage() {
 
     return () => window.clearTimeout(timer)
   }, [loadJournals])
+
+  useEffect(() => {
+    void loadStatusCounts()
+  }, [loadStatusCounts])
 
   const handleFiltersChange = (nextFilters: TransactionFilters) => {
     setFilters(nextFilters)
@@ -276,8 +300,10 @@ export function JournalPage() {
       )
       setSelectedIds(new Set())
       await loadJournals(false)
+      await loadStatusCounts()
     } catch (error) {
       await loadJournals(false)
+      await loadStatusCounts()
       setActionError(`Odoo update failed. ${getApiErrorMessage(error)}`)
     } finally {
       setIsActionLoading(false)
@@ -374,7 +400,10 @@ export function JournalPage() {
             <button
               className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
-              onClick={() => void loadJournals()}
+              onClick={() => {
+                void loadJournals()
+                void loadStatusCounts()
+              }}
               disabled={isLoading}
               aria-label="Refresh journals"
             >
@@ -423,7 +452,10 @@ export function JournalPage() {
             accountPlaceholder="Search journal account..."
             isLoading={isLoading}
             onFiltersChange={handleFiltersChange}
-            onRefresh={() => void loadJournals()}
+            onRefresh={() => {
+              void loadJournals()
+              void loadStatusCounts()
+            }}
             onReset={handleResetFilters}
           />
         </div>
