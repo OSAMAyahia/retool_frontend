@@ -81,6 +81,10 @@ function formatDateOnly(value: string | null) {
   return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`
 }
 
+// Unlike formatDateOnly above (used for value_date, a literal value from the imported file that
+// must never shift), createdAt/updatedAt are system-generated "now" timestamps with no original
+// literal to preserve - showing them in the viewer's own local time (what their wall clock says
+// "now" was) is what users expect, so this intentionally uses local getters, not UTC ones.
 function formatDateTime(value: string | null) {
   if (!value) {
     return null
@@ -91,12 +95,12 @@ function formatDateTime(value: string | null) {
     return value
   }
 
-  const hours24 = date.getUTCHours()
+  const hours24 = date.getHours()
   const period = hours24 >= 12 ? 'PM' : 'AM'
   const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12
 
-  const datePart = `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`
-  const timePart = `${hours12}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} ${period}`
+  const datePart = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
+  const timePart = `${hours12}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ${period}`
 
   return `${datePart} ${timePart}`
 }
