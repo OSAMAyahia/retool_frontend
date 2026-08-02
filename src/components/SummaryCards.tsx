@@ -48,7 +48,27 @@ function percent(value: number, total: number) {
   return `${Math.round((value / total) * 100)}%`
 }
 
-export function SummaryCards({ summary }: { summary: TransactionSummary }) {
+type SummaryCardKey = (typeof cards)[number]['key']
+
+export interface SummaryCardSubFilter {
+  key: string
+  label: string
+  active: boolean
+  onClick: () => void
+}
+
+interface SummaryCardsProps {
+  summary: TransactionSummary
+  // Clicking a card applies that card's implied filter to the table below. Omit to keep cards
+  // non-interactive (e.g. if a page hasn't wired up filtering).
+  onCardClick?: (key: SummaryCardKey) => void
+  activeCard?: SummaryCardKey | null
+  // Small filter chips nested under one specific card (used for "Not completed" -> Not mapped /
+  // Not balanced on the Journal Table).
+  subFilters?: Partial<Record<SummaryCardKey, SummaryCardSubFilter[]>>
+}
+
+export function SummaryCards({ summary, onCardClick, activeCard, subFilters }: SummaryCardsProps) {
   return (
     <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map((card) => {
@@ -60,13 +80,23 @@ export function SummaryCards({ summary }: { summary: TransactionSummary }) {
             : card.key === 'journalRows'
               ? card.caption
               : `${percent(value, summary.total)} ${card.caption}`
+        const isClickable = Boolean(onCardClick)
+        const isActive = activeCard === card.key
+        const cardSubFilters = subFilters?.[card.key]
 
         return (
           <article
             key={card.key}
-            className={`min-h-[184px] rounded-2xl border bg-gradient-to-br from-white to-white/75 p-5 ${card.frame}`}
+            className={`min-h-[184px] rounded-2xl border bg-gradient-to-br from-white to-white/75 p-5 ${card.frame} ${
+              isActive ? 'ring-2 ring-offset-2 ring-[#6847f5]' : ''
+            }`}
           >
-            <div className="flex items-center gap-4">
+            <button
+              type="button"
+              className={`flex w-full items-center gap-4 text-left ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
+              onClick={() => onCardClick?.(card.key)}
+              disabled={!isClickable}
+            >
               <span className={`grid h-14 w-14 place-items-center rounded-2xl ${card.iconClass}`}>
                 <Icon className="h-7 w-7" aria-hidden="true" />
               </span>
@@ -76,7 +106,7 @@ export function SummaryCards({ summary }: { summary: TransactionSummary }) {
                   {value}
                 </strong>
               </div>
-            </div>
+            </button>
             <div className="mt-8 flex items-end justify-between gap-4">
               <span className="font-semibold text-[#566283]">{caption}</span>
               <svg className={`h-10 w-[44%] min-w-[110px] fill-none ${card.accent}`} viewBox="0 0 130 36">
@@ -88,6 +118,24 @@ export function SummaryCards({ summary }: { summary: TransactionSummary }) {
                 />
               </svg>
             </div>
+            {cardSubFilters && cardSubFilters.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-black/5 pt-3">
+                {cardSubFilters.map((sub) => (
+                  <button
+                    key={sub.key}
+                    type="button"
+                    onClick={sub.onClick}
+                    className={`rounded-full border px-3 py-1 text-xs font-bold transition ${
+                      sub.active
+                        ? 'border-[#6847f5] bg-[#6847f5] text-white'
+                        : 'border-[#dfe6f4] bg-white text-[#566283] hover:border-[#6847f5]'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </article>
         )
       })}

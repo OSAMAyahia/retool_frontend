@@ -142,6 +142,18 @@ export function JournalTable({ journals, isLoading, onSelect, selectedIds, onTog
                 </td>
                 <td className="px-5 align-middle">
                   <StatusBadge status={journal.status} />
+                  {journal.status === 'REJECTED' && journal.errorMessage ? (
+                    <span
+                      className="mt-1 block max-w-[220px] truncate text-[11px] font-bold text-[#dc2626]"
+                      title={journal.errorMessage}
+                    >
+                      {journal.rejectionReason === 'NOT_MAPPED'
+                        ? 'Not mapped'
+                        : journal.rejectionReason === 'NOT_BALANCED'
+                          ? 'Not balanced'
+                          : journal.errorMessage}
+                    </span>
+                  ) : null}
                 </td>
               </tr>
             ))

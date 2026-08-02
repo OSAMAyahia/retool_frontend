@@ -553,6 +553,7 @@ export async function getJournals(
       account: filters.accountId || undefined,
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
+      rejectionReason: filters.rejectionReason || undefined,
     },
   })
 

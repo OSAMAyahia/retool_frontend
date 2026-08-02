@@ -16,7 +16,7 @@ import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
-import { SummaryCards } from '../components/SummaryCards'
+import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
 import { getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
 import { displayDate, journalColumnLabels } from '../utils/tableFields'
@@ -258,6 +258,46 @@ export function JournalPage() {
     setPage(0)
   }
 
+  // Clicking a summary card filters the table below to that bucket. "Not completed" has no
+  // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT".
+  const handleSummaryCardClick = (key: 'total' | 'completed' | 'unCompleted' | 'journalRows') => {
+    if (key === 'completed') {
+      handleFiltersChange({ ...filters, internalStatus: 'SENT', rejectionReason: undefined })
+      return
+    }
+    if (key === 'unCompleted') {
+      handleFiltersChange({ ...filters, internalStatus: 'NOT_SENT', rejectionReason: undefined })
+      return
+    }
+    handleFiltersChange({ ...filters, internalStatus: '', rejectionReason: undefined })
+  }
+
+  const activeSummaryCard = useMemo(() => {
+    if (filters.internalStatus === 'SENT') {
+      return 'completed' as const
+    }
+    if (filters.internalStatus === 'NOT_SENT' || filters.rejectionReason) {
+      return 'unCompleted' as const
+    }
+    return null
+  }, [filters])
+
+  const notCompletedSubFilters = useMemo<SummaryCardSubFilter[]>(() => {
+    const toggle = (reason: string) => {
+      handleFiltersChange({
+        ...filters,
+        internalStatus: 'NOT_SENT',
+        rejectionReason: filters.rejectionReason === reason ? undefined : reason,
+      })
+    }
+
+    return [
+      { key: 'NOT_MAPPED', label: 'Not mapped', active: filters.rejectionReason === 'NOT_MAPPED', onClick: () => toggle('NOT_MAPPED') },
+      { key: 'NOT_BALANCED', label: 'Not balanced', active: filters.rejectionReason === 'NOT_BALANCED', onClick: () => toggle('NOT_BALANCED') },
+    ]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters])
+
   const handleSelectJournal = async (journal: Journal) => {
     setSelectedJournal(journal)
     try {
@@ -429,7 +469,12 @@ export function JournalPage() {
           </div>
         </header>
 
-        <SummaryCards summary={summary} />
+        <SummaryCards
+          summary={summary}
+          onCardClick={handleSummaryCardClick}
+          activeCard={activeSummaryCard}
+          subFilters={{ unCompleted: notCompletedSubFilters }}
+        />
 
         {actionMessage ? (
           <div className="rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">

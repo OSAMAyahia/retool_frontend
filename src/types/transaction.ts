@@ -42,6 +42,7 @@ export interface Journal {
   lineCount: number
   status: string
   errorMessage: string | null
+  rejectionReason?: 'NOT_MAPPED' | 'NOT_BALANCED' | 'OTHER' | null
   odooReferenceId: string | null
   createdAt: string
   updatedAt: string
@@ -103,6 +104,8 @@ export interface TransactionFilters {
   accountId?: string
   dateFrom?: string
   dateTo?: string
+  // Journal-only: narrows REJECTED entries down to a specific cause ("NOT_MAPPED" | "NOT_BALANCED").
+  rejectionReason?: string
 }
 
 export interface TransactionSummary {

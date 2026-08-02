@@ -109,7 +109,11 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
             <div className="mb-5 flex gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <div>
-                <strong className="block font-extrabold">Odoo rejection details</strong>
+                <strong className="block font-extrabold">
+                  Odoo rejection details
+                  {journal.rejectionReason === 'NOT_MAPPED' ? ' — Not mapped' : null}
+                  {journal.rejectionReason === 'NOT_BALANCED' ? ' — Not balanced' : null}
+                </strong>
                 <p className="mt-1 break-words font-medium">{journal.errorMessage}</p>
               </div>
             </div>

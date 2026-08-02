@@ -303,6 +303,34 @@ export function Dashboard() {
     setPage(0)
   }
 
+  // Clicking a summary card filters the table below to that bucket. "Journal Rows" isn't a
+  // Transaction-table filter - it points at the Journal Table page instead.
+  const handleSummaryCardClick = (key: 'total' | 'completed' | 'unCompleted' | 'journalRows') => {
+    if (key === 'journalRows') {
+      navigate('/journal')
+      return
+    }
+    if (key === 'completed') {
+      handleFiltersChange({ ...filters, internalStatus: 'completed' })
+      return
+    }
+    if (key === 'unCompleted') {
+      handleFiltersChange({ ...filters, internalStatus: 'un-completed' })
+      return
+    }
+    handleFiltersChange({ ...filters, internalStatus: '' })
+  }
+
+  const activeSummaryCard = useMemo(() => {
+    if (filters.internalStatus === 'completed') {
+      return 'completed' as const
+    }
+    if (filters.internalStatus === 'un-completed') {
+      return 'unCompleted' as const
+    }
+    return null
+  }, [filters])
+
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
@@ -628,7 +656,7 @@ export function Dashboard() {
           </div>
         </header>
 
-        <SummaryCards summary={summary} />
+        <SummaryCards summary={summary} onCardClick={handleSummaryCardClick} activeCard={activeSummaryCard} />
 
         {actionMessage ? (
           <div className="mt-6 rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
