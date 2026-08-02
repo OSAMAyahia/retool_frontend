@@ -11,7 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
@@ -141,7 +141,12 @@ function exportJournalsFile(journals: Journal[], format: ExportFormat) {
 export function JournalPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [filters, setFilters] = useState<TransactionFilters>({})
+  const location = useLocation()
+  // Lets other pages (the Dashboard's "Not completed" -> Not mapped/Not balanced buttons) deep
+  // link here with a filter already applied, since navigation state is the simplest way to pass
+  // that without introducing URL query-param syncing.
+  const initialFilters = (location.state as { initialFilters?: TransactionFilters } | null)?.initialFilters
+  const [filters, setFilters] = useState<TransactionFilters>(initialFilters ?? {})
   const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null)
   const [page, setPage] = useState(0)

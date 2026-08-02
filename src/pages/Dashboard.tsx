@@ -321,6 +321,33 @@ export function Dashboard() {
     handleFiltersChange({ ...filters, internalStatus: '' })
   }
 
+  // "Not mapped" / "Not balanced" are reasons a journal entry failed to reach Odoo - that's
+  // tracked at the Journal level, not on raw transaction rows, so these hand off to the Journal
+  // Table page (pre-filtered) rather than filtering the Transactions table itself.
+  const notCompletedSubFilters = useMemo(
+    () => [
+      {
+        key: 'NOT_MAPPED',
+        label: 'Not mapped',
+        active: false,
+        onClick: () =>
+          navigate('/journal', {
+            state: { initialFilters: { internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' } },
+          }),
+      },
+      {
+        key: 'NOT_BALANCED',
+        label: 'Not balanced',
+        active: false,
+        onClick: () =>
+          navigate('/journal', {
+            state: { initialFilters: { internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' } },
+          }),
+      },
+    ],
+    [navigate],
+  )
+
   const activeSummaryCard = useMemo(() => {
     if (filters.internalStatus === 'completed') {
       return 'completed' as const
@@ -656,7 +683,12 @@ export function Dashboard() {
           </div>
         </header>
 
-        <SummaryCards summary={summary} onCardClick={handleSummaryCardClick} activeCard={activeSummaryCard} />
+        <SummaryCards
+          summary={summary}
+          onCardClick={handleSummaryCardClick}
+          activeCard={activeSummaryCard}
+          subFilters={{ unCompleted: notCompletedSubFilters }}
+        />
 
         {actionMessage ? (
           <div className="mt-6 rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
