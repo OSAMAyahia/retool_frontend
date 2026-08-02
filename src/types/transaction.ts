@@ -22,24 +22,30 @@ export interface Transaction {
   rawPayload?: unknown
 }
 
+export interface JournalLine {
+  transactionId: string
+  itemLabel: string | null
+  itemAccount: string | null
+  debit: number | null
+  credit: number | null
+  analytic: string | null
+  rawPayload?: unknown
+}
+
 export interface Journal {
   transactionId: string
   journalDate: string | null
   journal: string | null
   reference: string | null
-  itemLabel: string | null
-  itemAccount: string | null
-  date?: string | null
-  amount?: number | null
-  crDr?: string | null
-  debit: number | null
-  credit: number | null
-  analytic: string | null
+  totalDebit: number
+  totalCredit: number
+  lineCount: number
   status: string
+  errorMessage: string | null
   odooReferenceId: string | null
   createdAt: string
   updatedAt: string
-  rawPayload?: unknown
+  lines: JournalLine[]
 }
 
 
@@ -47,7 +53,7 @@ export interface IngestTransactionPayload {
   date?: string | null
   txn_id?: string
   journal_id?: string
-  account_number?: string
+  account_number?: string | null
   cr_dr?: string
   value_date?: string | null
   created_at?: string | null

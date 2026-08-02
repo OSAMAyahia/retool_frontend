@@ -11,7 +11,7 @@ import type {
 } from '../types/transaction'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'https://absat-erp.com/barq-corebanking-api/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   timeout: 120000,
 })
 
@@ -88,13 +88,21 @@ interface BackendPage<T> {
 }
 
 interface BackendJournal extends Journal {
-  date?: string | null
   txn_id?: string
   journal_id?: string | null
-  account_number?: string | null
-  cr_dr?: string | null
-  value_date?: string | null
   created_at?: string
+}
+
+interface ImportUploadStatus {
+  uploadId: string
+  status: 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  uploadedChunks: number
+  totalChunks: number
+  received: number | null
+  duplicates: number | null
+  failed: number | null
+  errorMessage: string | null
+  rowsProcessed: number | null
 }
 
 export function getStoredAuthToken() {
@@ -185,11 +193,13 @@ function normalizeJournal(journal: BackendJournal): Journal {
   return {
     ...journal,
     transactionId: journal.transactionId ?? journal.txn_id ?? '',
-    journalDate: journal.journalDate ?? journal.value_date ?? journal.date ?? null,
+    journalDate: journal.journalDate ?? null,
     journal: journal.journal ?? journal.journal_id ?? null,
-    itemAccount: journal.itemAccount ?? journal.account_number ?? null,
-    date: journal.date ?? journal.journalDate ?? journal.value_date ?? null,
-    crDr: journal.crDr ?? journal.cr_dr ?? null,
+    totalDebit: journal.totalDebit ?? 0,
+    totalCredit: journal.totalCredit ?? 0,
+    lineCount: journal.lineCount ?? 0,
+    errorMessage: journal.errorMessage ?? null,
+    lines: journal.lines ?? [],
     createdAt: journal.createdAt ?? journal.created_at ?? '',
   }
 }
@@ -305,9 +315,175 @@ export async function ingestTransactions(
   return summary
 }
 
-export async function processJournals(): Promise<ProcessingResponse> {
-  const response = await api.post<ProcessingResponse>('/journals/process')
-  return response.data
+export async function importTransactionsFile(
+  file: File,
+  onProgress?: (
+    uploadedBytes: number,
+    totalBytes: number,
+    phase: 'uploading' | 'processing',
+    rowsProcessed?: number,
+  ) => void,
+): Promise<IngestSummaryResponse> {
+  const chunkSize = 5 * 1024 * 1024
+  const totalChunks = Math.ceil(file.size / chunkSize)
+  const session = await api.post<ImportUploadStatus>('/transactions/import-excel/uploads', {
+    fileName: file.name,
+    totalSize: file.size,
+    chunkSize,
+    totalChunks,
+  })
+  let uploadedBytes = 0
+  const uploadedChunkIndices = new Set<number>()
+
+  // A chunk request can fail transiently (proxy hiccup, rate limiting, a dropped
+  // connection) without the file itself being at fault. Retry each chunk with
+  // exponential backoff + jitter before giving up on it for this pass.
+  const uploadChunkOnce = async (chunkIndex: number, attempts = 4) => {
+    const start = chunkIndex * chunkSize
+    const chunk = file.slice(start, Math.min(start + chunkSize, file.size))
+    let lastError: unknown
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        await api.post(
+          `/transactions/import-excel/uploads/${session.data.uploadId}/chunks/${chunkIndex}`,
+          chunk,
+          {
+            headers: { 'Content-Type': 'application/octet-stream' },
+            timeout: 120000,
+          },
+        )
+        if (!uploadedChunkIndices.has(chunkIndex)) {
+          uploadedChunkIndices.add(chunkIndex)
+          uploadedBytes += chunk.size
+        }
+        onProgress?.(Math.min(uploadedBytes, file.size), file.size, 'uploading')
+        return
+      } catch (error) {
+        lastError = error
+        if (attempt < attempts - 1) {
+          const backoff = Math.min(1000 * 2 ** attempt, 8000)
+          const jitter = Math.random() * 400
+          await new Promise((resolve) => window.setTimeout(resolve, backoff + jitter))
+        }
+      }
+    }
+
+    throw lastError
+  }
+
+  // Upload in a handful of sweeps: any chunk that still fails after its own
+  // retries is requeued for the next sweep instead of aborting the whole
+  // upload outright. This keeps a burst of transient failures near the end of
+  // a large file from discarding everything that already succeeded.
+  const maxSweeps = 4
+  const concurrency = Math.min(2, totalChunks)
+  let pending = Array.from({ length: totalChunks }, (_, index) => index)
+  let lastFailure: unknown
+
+  for (let sweep = 0; sweep < maxSweeps && pending.length > 0; sweep += 1) {
+    if (sweep > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000 * sweep))
+    }
+    const queue = [...pending]
+    const failedThisSweep: number[] = []
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const chunkIndex = queue.shift()
+        if (chunkIndex === undefined) {
+          return
+        }
+        try {
+          await uploadChunkOnce(chunkIndex)
+        } catch (error) {
+          lastFailure = error
+          failedThisSweep.push(chunkIndex)
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
+    pending = failedThisSweep
+  }
+
+  if (pending.length > 0) {
+    throw lastFailure instanceof Error
+      ? lastFailure
+      : new Error(`Failed to upload ${pending.length} of ${totalChunks} chunk(s) after multiple attempts.`)
+  }
+
+  await api.post(`/transactions/import-excel/uploads/${session.data.uploadId}/complete`, undefined, {
+    timeout: 120000,
+  })
+  onProgress?.(file.size, file.size, 'processing')
+
+  for (let poll = 0; poll < 900; poll += 1) {
+    const status = await api.get<ImportUploadStatus>(
+      `/transactions/import-excel/uploads/${session.data.uploadId}`,
+    )
+    if (status.data.status === 'COMPLETED') {
+      return {
+        received: status.data.received ?? 0,
+        duplicates: status.data.duplicates ?? 0,
+        failed: status.data.failed ?? 0,
+        processedAt: new Date().toISOString(),
+        items: [],
+      }
+    }
+    if (status.data.status === 'FAILED') {
+      throw new Error(status.data.errorMessage || 'Large-file processing failed')
+    }
+    onProgress?.(file.size, file.size, 'processing', status.data.rowsProcessed ?? undefined)
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+  }
+
+  throw new Error('Large-file processing did not finish within 30 minutes')
+}
+
+interface JournalProcessingStatus {
+  jobId: string
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  processedEntries: number | null
+  startedAt: string
+  finishedAt: string | null
+  errorMessage: string | null
+}
+
+// /journals/process now starts a background job and returns immediately instead of blocking
+// until the whole backlog is processed - a large backlog could otherwise take well past a
+// reverse proxy's timeout and come back as a 504 even though the backend kept working. This
+// polls the job to completion so callers can keep the same "await processJournals()" shape.
+export async function processJournals(
+  onProgress?: (status: 'RUNNING' | 'COMPLETED' | 'FAILED') => void,
+): Promise<ProcessingResponse> {
+  const start = await api.post<JournalProcessingStatus>('/journals/process')
+  const jobId = start.data.jobId
+  onProgress?.(start.data.status)
+
+  if (start.data.status === 'COMPLETED') {
+    return {
+      processed: start.data.processedEntries ?? 0,
+      processedAt: start.data.finishedAt ?? new Date().toISOString(),
+    }
+  }
+
+  for (let poll = 0; poll < 900; poll += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    const status = await api.get<JournalProcessingStatus>(`/journals/process/${jobId}`)
+    onProgress?.(status.data.status)
+    if (status.data.status === 'COMPLETED') {
+      return {
+        processed: status.data.processedEntries ?? 0,
+        processedAt: status.data.finishedAt ?? new Date().toISOString(),
+      }
+    }
+    if (status.data.status === 'FAILED') {
+      throw new Error(status.data.errorMessage || 'Journal processing failed')
+    }
+  }
+
+  throw new Error('Journal processing did not finish within 30 minutes')
 }
 
 export async function getJournals(
@@ -328,6 +504,11 @@ export async function getJournals(
   })
 
   return normalizeJournalPage(response.data)
+}
+
+export async function getJournalById(transactionId: string): Promise<Journal> {
+  const response = await api.get<BackendJournal>(`/journals/${encodeURIComponent(transactionId)}`)
+  return normalizeJournal(response.data)
 }
 
 export async function sendJournalsToOdoo(): Promise<ProcessingResponse> {

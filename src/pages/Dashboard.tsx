@@ -24,6 +24,7 @@ import {
   getSources,
   getTransactionById,
   getTransactions,
+  importTransactionsFile,
   ingestTransactions,
   processJournals,
   retryTransaction,
@@ -81,6 +82,7 @@ const dashboardStatuses: TransactionStatus[] = [
 ]
 
 const fallbackSources = ['Excel', 'Retool', 'Bank API', 'Partner Portal']
+const LARGE_FILE_THRESHOLD_BYTES = 8 * 1024 * 1024
 
 function getApiErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -140,7 +142,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const excelInputRef = useRef<HTMLInputElement | null>(null)
   const csvInputRef = useRef<HTMLInputElement | null>(null)
-  const [filters, setFilters] = useState<TransactionFilters>({})
+  const [filters, setFilters] = useState<TransactionFilters>({ internalStatus: 'un-completed' })
   const [transactionsPage, setTransactionsPage] = useState<PageResponse<Transaction>>(initialTransactionsPage)
   const [journalRows, setJournalRows] = useState(0)
   const [sources, setSources] = useState<string[]>(fallbackSources)
@@ -292,6 +294,37 @@ export function Dashboard() {
     setActionError(null)
 
     try {
+      const extension = file.name.split('.').pop()?.toLowerCase()
+      const useStreamingImport = file.size >= LARGE_FILE_THRESHOLD_BYTES
+        && (extension === 'xlsx' || extension === 'csv')
+
+      if (useStreamingImport) {
+        setActionMessage(`Uploading large file 0% — it will be processed in memory-safe batches.`)
+        const result = await importTransactionsFile(file, (uploadedBytes, totalBytes, phase, rowsProcessed) => {
+          if (phase === 'processing') {
+            setActionMessage(
+              rowsProcessed
+                ? `Processing rows on the server… ${rowsProcessed.toLocaleString()} rows processed so far.`
+                : 'Upload completed. The server is processing rows in memory-safe batches…',
+            )
+            return
+          }
+          const percent = totalBytes > 0 ? Math.min(Math.round((uploadedBytes / totalBytes) * 100), 100) : 0
+          setActionMessage(`Uploading large file ${percent}% in retry-safe chunks…`)
+        })
+        setActionMessage(
+          `Large-file import completed. Imported ${result.received} rows, skipped ${result.duplicates} duplicates, and rejected ${result.failed}.`,
+        )
+        if (result.failed > 0) {
+          setActionError(`Some rows were rejected. Open the row details or retry after correcting the source file.`)
+        }
+        setFilters({})
+        setPage(0)
+        await loadTransactions(false, {}, 0)
+        await loadJournalCount()
+        return
+      }
+
       const rows = await parseExcelToTransactions(file)
       setImportRows(rows)
       setIsImportPopupOpen(true)
@@ -373,8 +406,13 @@ export function Dashboard() {
     setActionError(null)
 
     try {
-      const result = await processJournals()
-      setActionMessage(`Journal processing completed for ${result.processed} rows.`)
+      setActionMessage('Processing journal entries on the server…')
+      const result = await processJournals((status) => {
+        if (status === 'RUNNING') {
+          setActionMessage('Still processing journal entries on the server…')
+        }
+      })
+      setActionMessage(`Journal processing created ${result.processed} balanced journal entries.`)
       await loadTransactions(false)
       await loadJournalCount()
     } catch (processError) {
@@ -679,7 +717,6 @@ export function Dashboard() {
     </main>
   )
 }
-
 
 
 

@@ -1,4 +1,15 @@
-import { ArrowLeft, Download, FileSpreadsheet, LogOut, RefreshCw, RotateCw, Send, ShieldCheck } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileSpreadsheet,
+  LogOut,
+  RefreshCw,
+  RotateCw,
+  Send,
+  ShieldCheck,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
@@ -6,14 +17,14 @@ import { FilterBar } from '../components/FilterBar'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
 import { SummaryCards } from '../components/SummaryCards'
-import { getJournals, sendJournalsToOdoo } from '../services/api'
+import { getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
-import { displayDate, journalAmount, journalColumnLabels, journalCrDr, journalDate } from '../utils/tableFields'
+import { displayDate, journalColumnLabels } from '../utils/tableFields'
 
 const initialJournalsPage: PageResponse<Journal> = {
   content: [],
   page: 0,
-  size: 100,
+  size: 50,
   totalElements: 0,
   totalPages: 0,
 }
@@ -102,13 +113,12 @@ type ExportFormat = 'excel' | 'csv'
 
 function exportJournalsFile(journals: Journal[], format: ExportFormat) {
   const rows = journals.map((journal) => [
-    displayDate(journalDate(journal)),
+    displayDate(journal.journalDate),
     journal.transactionId,
     journal.journal ?? '',
-    journal.itemAccount ?? '',
-    journalAmount(journal) ?? '',
-    journalCrDr(journal),
-    displayDate(journal.journalDate),
+    journal.totalDebit,
+    journal.totalCredit,
+    journal.lineCount,
     journal.createdAt,
     journal.status,
   ])
@@ -132,6 +142,7 @@ export function JournalPage() {
   const [filters, setFilters] = useState<TransactionFilters>({})
   const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null)
+  const [page, setPage] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -157,7 +168,7 @@ export function JournalPage() {
       }
 
       try {
-        const response = await getJournals(filters, 0, 100)
+        const response = await getJournals(filters, page, 50)
         setJournalsPage(response)
         setActionError(null)
       } catch (error) {
@@ -168,7 +179,7 @@ export function JournalPage() {
         setLastUpdated(new Date())
       }
     },
-    [filters],
+    [filters, page],
   )
 
   useEffect(() => {
@@ -181,22 +192,44 @@ export function JournalPage() {
 
   const handleFiltersChange = (nextFilters: TransactionFilters) => {
     setFilters(nextFilters)
+    setPage(0)
   }
 
   const handleResetFilters = () => {
     setFilters({})
+    setPage(0)
+  }
+
+  const handleSelectJournal = async (journal: Journal) => {
+    setSelectedJournal(journal)
+    try {
+      setSelectedJournal(await getJournalById(journal.transactionId))
+    } catch {
+      setSelectedJournal(journal)
+    }
   }
 
   const handleSendToOdoo = async () => {
     setIsActionLoading(true)
     setActionMessage(null)
     setActionError(null)
+    setJournalsPage((current) => ({
+      ...current,
+      content: current.content.map((journal) => (
+        odooSendableStatuses.has(journal.status)
+          ? { ...journal, status: 'PROCESSING', errorMessage: null }
+          : journal
+      )),
+    }))
 
     try {
       const result = await sendJournalsToOdoo()
-      setActionMessage(`Sent ${result.processed} journal rows to Odoo. New and rejected rows are eligible for retry.`)
+      setActionMessage(
+        `Sent ${result.processed} journal entries to Odoo. Rejected entries include the exact error and can be retried.`,
+      )
       await loadJournals(false)
     } catch (error) {
+      await loadJournals(false)
       setActionError(`Odoo update failed. ${getApiErrorMessage(error)}`)
     } finally {
       setIsActionLoading(false)
@@ -217,7 +250,7 @@ export function JournalPage() {
               Journal Table
             </h1>
             <p className="mt-2 max-w-2xl text-sm font-medium text-[#617096]">
-              Processed journal rows with the original processing statuses
+              One balanced record per txn_id. Click any record to inspect every debit and credit line.
             </p>
           </div>
 
@@ -278,15 +311,15 @@ export function JournalPage() {
               className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-4 text-xs font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               onClick={() => void handleSendToOdoo()}
-              disabled={isActionLoading || sendableJournalCount === 0}
+              disabled={isActionLoading}
               title={
                 sendableJournalCount > 0
-                  ? `${sendableJournalCount} new or rejected journal rows can be sent to Odoo`
-                  : 'There are no new or rejected journal rows to send'
+                  ? `${sendableJournalCount} visible new or rejected journal entries can be sent to Odoo`
+                  : 'Send all eligible journal entries'
               }
             >
               <Send className="h-4 w-4" aria-hidden="true" />
-              {sendableJournalCount > 0 ? `Send ${sendableJournalCount} to Odoo` : 'No rows to send'}
+              Send to Odoo
             </button>
             <button
               className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
@@ -346,9 +379,34 @@ export function JournalPage() {
         </div>
 
         <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          <JournalTable journals={journalsPage.content} isLoading={isLoading} onSelect={setSelectedJournal} />
-          <div className="border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
-            Showing {journalsPage.content.length} of {journalsPage.totalElements} journal rows
+          <JournalTable journals={journalsPage.content} isLoading={isLoading} onSelect={handleSelectJournal} />
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
+            <span>
+              Showing {journalsPage.content.length} of {journalsPage.totalElements} journal entries
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white px-3 font-bold text-[#172452] disabled:opacity-40"
+                type="button"
+                disabled={page === 0 || isLoading}
+                onClick={() => setPage((current) => Math.max(current - 1, 0))}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                Previous
+              </button>
+              <span className="px-2 font-bold">
+                Page {page + 1} of {Math.max(journalsPage.totalPages, 1)}
+              </span>
+              <button
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white px-3 font-bold text-[#172452] disabled:opacity-40"
+                type="button"
+                disabled={page + 1 >= journalsPage.totalPages || isLoading}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
       </section>
