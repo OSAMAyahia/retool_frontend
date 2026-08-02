@@ -16,6 +16,7 @@ import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
+import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
 import { getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
@@ -158,6 +159,8 @@ export function JournalPage() {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [statusCounts, setStatusCounts] = useState({ total: 0, sent: 0 })
+  const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0 })
+  const [sendProgress, setSendProgress] = useState<{ label: string; subLabel: string } | null>(null)
 
   const summary = useMemo(
     () => buildJournalSummary(statusCounts.total, statusCounts.sent),
@@ -231,13 +234,17 @@ export function JournalPage() {
   // overall counts, not whatever subset the table happens to be filtered/paginated to.
   const loadStatusCounts = useCallback(async () => {
     try {
-      const [totalResponse, sentResponse] = await Promise.all([
+      const [totalResponse, sentResponse, notMappedResponse, notBalancedResponse] = await Promise.all([
         getJournals({}, 0, 1),
         getJournals({ internalStatus: 'SENT' }, 0, 1),
+        getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' }, 0, 1),
+        getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' }, 0, 1),
       ])
       setStatusCounts({ total: totalResponse.totalElements, sent: sentResponse.totalElements })
+      setReasonCounts({ notMapped: notMappedResponse.totalElements, notBalanced: notBalancedResponse.totalElements })
     } catch {
       setStatusCounts({ total: 0, sent: 0 })
+      setReasonCounts({ notMapped: 0, notBalanced: 0 })
     }
   }, [])
 
@@ -297,11 +304,21 @@ export function JournalPage() {
     }
 
     return [
-      { key: 'NOT_MAPPED', label: 'Not mapped', active: filters.rejectionReason === 'NOT_MAPPED', onClick: () => toggle('NOT_MAPPED') },
-      { key: 'NOT_BALANCED', label: 'Not balanced', active: filters.rejectionReason === 'NOT_BALANCED', onClick: () => toggle('NOT_BALANCED') },
+      {
+        key: 'NOT_MAPPED',
+        label: `Not mapped (${reasonCounts.notMapped})`,
+        active: filters.rejectionReason === 'NOT_MAPPED',
+        onClick: () => toggle('NOT_MAPPED'),
+      },
+      {
+        key: 'NOT_BALANCED',
+        label: `Not balanced (${reasonCounts.notBalanced})`,
+        active: filters.rejectionReason === 'NOT_BALANCED',
+        onClick: () => toggle('NOT_BALANCED'),
+      },
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters])
+  }, [filters, reasonCounts])
 
   const handleSelectJournal = async (journal: Journal) => {
     setSelectedJournal(journal)
@@ -317,6 +334,7 @@ export function JournalPage() {
     const transactionIds = selectedSendableIds.length > 0 ? selectedSendableIds : undefined
     const targetIds = transactionIds ? new Set(transactionIds) : null
 
+    const totalToSend = transactionIds ? transactionIds.length : sendableJournalCount
     setIsActionLoading(true)
     setActionMessage(null)
     setActionError(null)
@@ -329,17 +347,21 @@ export function JournalPage() {
       )),
     }))
 
+    // The backend job only reports a final processedEntries count once COMPLETED, not a live
+    // running total mid-job, so this stays an indeterminate (animated) bar rather than a fake
+    // percentage - still shows what's happening and how many entries are in flight.
+    setSendProgress({
+      label: transactionIds ? `Sending ${totalToSend} selected journal entries to Odoo` : 'Sending journal entries to Odoo',
+      subLabel: 'Waiting for Odoo to accept each balanced entry…',
+    })
+
     try {
-      setActionMessage(
-        transactionIds
-          ? `Sending ${transactionIds.length} selected journal entries to Odoo…`
-          : 'Sending journal entries to Odoo…',
-      )
       const result = await sendJournalsToOdoo((status) => {
         if (status === 'RUNNING') {
-          setActionMessage('Still sending journal entries to Odoo…')
+          setSendProgress((current) => current && { ...current, subLabel: 'Still sending — Odoo is processing the batch…' })
         }
       }, transactionIds)
+      setSendProgress(null)
       setActionMessage(
         `Sent ${result.processed} journal entries to Odoo. Rejected entries include the exact error and can be retried.`,
       )
@@ -347,6 +369,7 @@ export function JournalPage() {
       await loadJournals(false)
       await loadStatusCounts()
     } catch (error) {
+      setSendProgress(null)
       await loadJournals(false)
       await loadStatusCounts()
       setActionError(`Odoo update failed. ${getApiErrorMessage(error)}`)
@@ -481,6 +504,9 @@ export function JournalPage() {
           subFilters={{ unCompleted: notCompletedSubFilters }}
         />
 
+        {sendProgress ? (
+          <ProgressBar label={sendProgress.label} subLabel={sendProgress.subLabel} />
+        ) : null}
         {actionMessage ? (
           <div className="rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
             {actionMessage}

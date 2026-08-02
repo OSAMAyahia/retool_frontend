@@ -16,6 +16,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { ExcelImportModal } from '../components/ExcelImportModal'
 import { FilterBar } from '../components/FilterBar'
+import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
 import { TransactionTable } from '../components/TransactionTable'
@@ -176,6 +177,8 @@ export function Dashboard() {
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [statusCounts, setStatusCounts] = useState({ completed: 0, unCompleted: 0 })
+  const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0 })
+  const [uploadProgress, setUploadProgress] = useState<{ label: string; subLabel?: string; percent: number | null } | null>(null)
 
   const loadTransactions = useCallback(
     async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
@@ -223,10 +226,20 @@ export function Dashboard() {
 
   const loadJournalCount = useCallback(async () => {
     try {
-      const response: PageResponse<Journal> = await getJournals({}, 0, 1)
-      setJournalRows(response.totalElements)
+      const [totalResponse, notMappedResponse, notBalancedResponse]: [
+        PageResponse<Journal>,
+        PageResponse<Journal>,
+        PageResponse<Journal>,
+      ] = await Promise.all([
+        getJournals({}, 0, 1),
+        getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' }, 0, 1),
+        getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' }, 0, 1),
+      ])
+      setJournalRows(totalResponse.totalElements)
+      setReasonCounts({ notMapped: notMappedResponse.totalElements, notBalanced: notBalancedResponse.totalElements })
     } catch {
       setJournalRows(0)
+      setReasonCounts({ notMapped: 0, notBalanced: 0 })
     }
   }, [])
 
@@ -328,7 +341,7 @@ export function Dashboard() {
     () => [
       {
         key: 'NOT_MAPPED',
-        label: 'Not mapped',
+        label: `Not mapped (${reasonCounts.notMapped})`,
         active: false,
         onClick: () =>
           navigate('/journal', {
@@ -337,7 +350,7 @@ export function Dashboard() {
       },
       {
         key: 'NOT_BALANCED',
-        label: 'Not balanced',
+        label: `Not balanced (${reasonCounts.notBalanced})`,
         active: false,
         onClick: () =>
           navigate('/journal', {
@@ -345,7 +358,7 @@ export function Dashboard() {
           }),
       },
     ],
-    [navigate],
+    [navigate, reasonCounts],
   )
 
   const activeSummaryCard = useMemo(() => {
@@ -439,6 +452,7 @@ export function Dashboard() {
     setIsActionLoading(true)
     setActionMessage(null)
     setActionError(null)
+    setUploadProgress(null)
 
     try {
       const extension = file.name.split('.').pop()?.toLowerCase()
@@ -446,19 +460,24 @@ export function Dashboard() {
         && (extension === 'xlsx' || extension === 'csv')
 
       if (useStreamingImport) {
-        setActionMessage(`Uploading large file 0% — it will be processed in memory-safe batches.`)
+        setUploadProgress({ label: 'Uploading large file', subLabel: 'Sending retry-safe chunks…', percent: 0 })
         const result = await importTransactionsFile(file, (uploadedBytes, totalBytes, phase, rowsProcessed) => {
           if (phase === 'processing') {
-            setActionMessage(
-              rowsProcessed
-                ? `Processing rows on the server… ${rowsProcessed.toLocaleString()} rows processed so far.`
-                : 'Upload completed. The server is processing rows in memory-safe batches…',
-            )
+            setUploadProgress({
+              label: 'Processing on the server',
+              subLabel: rowsProcessed
+                ? `${rowsProcessed.toLocaleString()} rows processed so far…`
+                : 'Splitting the file into memory-safe batches…',
+              // No total row count is known until the server finishes counting, so this phase
+              // is shown as an animated indeterminate bar rather than a fake percentage.
+              percent: null,
+            })
             return
           }
           const percent = totalBytes > 0 ? Math.min(Math.round((uploadedBytes / totalBytes) * 100), 100) : 0
-          setActionMessage(`Uploading large file ${percent}% in retry-safe chunks…`)
+          setUploadProgress({ label: 'Uploading large file', subLabel: 'Sending retry-safe chunks…', percent })
         })
+        setUploadProgress(null)
         setActionMessage(
           `Large-file import completed. Imported ${result.received} rows, skipped ${result.duplicates} duplicates, and rejected ${result.failed}.`,
         )
@@ -478,6 +497,7 @@ export function Dashboard() {
       setImportRows(rows)
       setIsImportPopupOpen(true)
     } catch (importError) {
+      setUploadProgress(null)
       setActionError(`Import preview failed. ${getApiErrorMessage(importError)}`)
     } finally {
       setIsActionLoading(false)
@@ -494,12 +514,17 @@ export function Dashboard() {
     setIsActionLoading(true)
     setActionMessage(null)
     setActionError(null)
+    setUploadProgress({ label: `Sending ${importRows.length} rows`, subLabel: '0 sent so far…', percent: 0 })
 
     try {
-      setActionMessage(`Sending 0 of ${importRows.length} rows...`)
       const result = await ingestTransactions(importRows, (sent, total) => {
-        setActionMessage(`Sending ${sent} of ${total} rows...`)
+        setUploadProgress({
+          label: `Sending ${total} rows`,
+          subLabel: `${sent.toLocaleString()} of ${total.toLocaleString()} sent…`,
+          percent: total > 0 ? Math.min(Math.round((sent / total) * 100), 100) : 0,
+        })
       })
+      setUploadProgress(null)
       const nextFilters: TransactionFilters = {}
       setFilters(nextFilters)
       setPage(0)
@@ -545,6 +570,7 @@ export function Dashboard() {
       await loadTransactionStatusCounts()
       await loadJournalCount()
     } catch (importError) {
+      setUploadProgress(null)
       setActionError(`Import failed. ${getApiErrorMessage(importError)}`)
     } finally {
       setIsActionLoading(false)
@@ -690,6 +716,11 @@ export function Dashboard() {
           subFilters={{ unCompleted: notCompletedSubFilters }}
         />
 
+        {uploadProgress ? (
+          <div className="mt-6">
+            <ProgressBar label={uploadProgress.label} subLabel={uploadProgress.subLabel} percent={uploadProgress.percent} />
+          </div>
+        ) : null}
         {actionMessage ? (
           <div className="mt-6 rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
             {actionMessage}
