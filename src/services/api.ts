@@ -254,6 +254,7 @@ export async function getTransactions(
       accountId: filters.accountId || undefined,
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
+      notCompletedReason: filters.rejectionReason || undefined,
     },
   })
 
@@ -286,6 +287,7 @@ export async function getTransactionGroups(
       accountId: filters.accountId || undefined,
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
+      notCompletedReason: filters.rejectionReason || undefined,
     },
   })
 

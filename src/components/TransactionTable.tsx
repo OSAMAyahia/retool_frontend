@@ -5,6 +5,20 @@ interface TransactionTableProps {
   groups: TransactionGroupSummary[]
   isLoading: boolean
   onSelectGroup: (group: TransactionGroupSummary) => void
+  // When the Dashboard's "Not mapped"/"Not balanced" sub-filter is active, every visible row
+  // already matches that reason (it's the query's WHERE clause) - shown as a small tag next to
+  // each row so it's clear why these rows never became a Journal Table entry.
+  activeReason?: string
+}
+
+function reasonTagLabel(reason?: string) {
+  if (reason === 'NOT_MAPPED') {
+    return 'Not mapped'
+  }
+  if (reason === 'NOT_BALANCED') {
+    return 'Not balanced'
+  }
+  return null
 }
 
 const columns = dashboardColumnLabels
@@ -40,7 +54,8 @@ function LoadingRows() {
   )
 }
 
-export function TransactionTable({ groups, isLoading, onSelectGroup }: TransactionTableProps) {
+export function TransactionTable({ groups, isLoading, onSelectGroup, activeReason }: TransactionTableProps) {
+  const reasonLabel = reasonTagLabel(activeReason)
   return (
     <div className="max-h-[680px] overflow-y-auto overflow-x-hidden bg-white">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
@@ -105,8 +120,13 @@ export function TransactionTable({ groups, isLoading, onSelectGroup }: Transacti
                             {group.recordCount > 1 ? 'Grouped rows' : '1 row'}
                           </span>
                         </span>
-                        <span className="mt-0.5 block truncate text-[11px] font-bold text-[#7a86a6]">
+                        <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-bold text-[#7a86a6]">
                           Click row for details
+                          {reasonLabel ? (
+                            <span className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-extrabold uppercase text-amber-800">
+                              {reasonLabel}
+                            </span>
+                          ) : null}
                         </span>
                       </span>
                     </span>

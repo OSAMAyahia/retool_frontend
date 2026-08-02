@@ -16,6 +16,7 @@ export interface Transaction {
   valueDate: string | null
   retryCount: number
   lastError: string | null
+  notCompletedReason?: 'NOT_MAPPED' | 'NOT_BALANCED' | 'OTHER' | null
   odooReferenceId: string | null
   createdAt: string
   updatedAt: string

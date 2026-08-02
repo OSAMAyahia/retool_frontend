@@ -30,6 +30,29 @@ function formatGroupAmount(amount: number) {
   }).format(amount)
 }
 
+function reasonLabel(reason: Transaction['notCompletedReason']) {
+  if (reason === 'NOT_MAPPED') {
+    return 'Not mapped'
+  }
+  if (reason === 'NOT_BALANCED') {
+    return 'Not balanced'
+  }
+  return null
+}
+
+function ReasonTag({ reason }: { reason: Transaction['notCompletedReason'] }) {
+  const label = reasonLabel(reason)
+  if (!label) {
+    return null
+  }
+
+  return (
+    <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-800">
+      {label}
+    </span>
+  )
+}
+
 function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
     <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -148,8 +171,11 @@ export function TransactionDetailPanel({
                       onClick={() => onSelectFromGroup(item)}
                     >
                       <span className="min-w-0">
-                        <span className="block truncate font-mono text-sm font-semibold text-slate-900">
-                          {item.transactionId}
+                        <span className="flex items-center gap-2">
+                          <span className="truncate font-mono text-sm font-semibold text-slate-900">
+                            {item.transactionId}
+                          </span>
+                          <ReasonTag reason={item.notCompletedReason} />
                         </span>
                         <span className="mt-0.5 block text-xs text-slate-500">
                           journal {transactionJournalId(item) || '-'} · {transactionCrDr(item)}
@@ -179,8 +205,9 @@ export function TransactionDetailPanel({
         <header className="border-b border-slate-200 px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="mb-2">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
                 <StatusBadge status={transaction.internalStatus} />
+                <ReasonTag reason={transaction.notCompletedReason} />
               </div>
               <h2 className="truncate text-lg font-semibold text-slate-950">
                 {transaction.transactionId}
@@ -214,7 +241,10 @@ export function TransactionDetailPanel({
 
           {transaction.lastError ? (
             <section className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <h3 className="font-semibold text-red-800">Last Error</h3>
+              <h3 className="font-semibold text-red-800">
+                Last Error
+                {reasonLabel(transaction.notCompletedReason) ? ` — ${reasonLabel(transaction.notCompletedReason)}` : ''}
+              </h3>
               <p className="mt-1 whitespace-pre-wrap">{transaction.lastError}</p>
             </section>
           ) : null}

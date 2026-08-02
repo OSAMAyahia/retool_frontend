@@ -226,38 +226,35 @@ export function Dashboard() {
 
   const loadJournalCount = useCallback(async () => {
     try {
-      const [totalResponse, notMappedResponse, notBalancedResponse]: [
-        PageResponse<Journal>,
-        PageResponse<Journal>,
-        PageResponse<Journal>,
-      ] = await Promise.all([
-        getJournals({}, 0, 1),
-        getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' }, 0, 1),
-        getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' }, 0, 1),
-      ])
-      setJournalRows(totalResponse.totalElements)
-      setReasonCounts({ notMapped: notMappedResponse.totalElements, notBalanced: notBalancedResponse.totalElements })
+      const response: PageResponse<Journal> = await getJournals({}, 0, 1)
+      setJournalRows(response.totalElements)
     } catch {
       setJournalRows(0)
-      setReasonCounts({ notMapped: 0, notBalanced: 0 })
     }
   }, [])
 
   // Independent of `filters`/`page` on purpose - the summary cards should always show the true
   // overall completed/not-completed counts, not whatever subset the table happens to be
   // filtered/paginated to (the Dashboard defaults to filtering to "un-completed" only).
+  // "Not mapped"/"Not balanced" are reasons a transaction never became a balanced Journal Table
+  // entry - Journal Processing now checks and records both at the transaction level (lastError),
+  // so these are transaction-table counts, not Journal-level ones.
   const loadTransactionStatusCounts = useCallback(async () => {
     try {
-      const [completedResponse, unCompletedResponse] = await Promise.all([
+      const [completedResponse, unCompletedResponse, notMappedResponse, notBalancedResponse] = await Promise.all([
         getTransactions({ internalStatus: 'completed' }, 0, 1),
         getTransactions({ internalStatus: 'un-completed' }, 0, 1),
+        getTransactions({ internalStatus: 'un-completed', rejectionReason: 'NOT_MAPPED' }, 0, 1),
+        getTransactions({ internalStatus: 'un-completed', rejectionReason: 'NOT_BALANCED' }, 0, 1),
       ])
       setStatusCounts({
         completed: completedResponse.totalElements,
         unCompleted: unCompletedResponse.totalElements,
       })
+      setReasonCounts({ notMapped: notMappedResponse.totalElements, notBalanced: notBalancedResponse.totalElements })
     } catch {
       setStatusCounts({ completed: 0, unCompleted: 0 })
+      setReasonCounts({ notMapped: 0, notBalanced: 0 })
     }
   }, [])
 
@@ -324,42 +321,45 @@ export function Dashboard() {
       return
     }
     if (key === 'completed') {
-      handleFiltersChange({ ...filters, internalStatus: 'completed' })
+      handleFiltersChange({ ...filters, internalStatus: 'completed', rejectionReason: undefined })
       return
     }
     if (key === 'unCompleted') {
-      handleFiltersChange({ ...filters, internalStatus: 'un-completed' })
+      handleFiltersChange({ ...filters, internalStatus: 'un-completed', rejectionReason: undefined })
       return
     }
-    handleFiltersChange({ ...filters, internalStatus: '' })
+    handleFiltersChange({ ...filters, internalStatus: '', rejectionReason: undefined })
   }
 
-  // "Not mapped" / "Not balanced" are reasons a journal entry failed to reach Odoo - that's
-  // tracked at the Journal level, not on raw transaction rows, so these hand off to the Journal
-  // Table page (pre-filtered) rather than filtering the Transactions table itself.
-  const notCompletedSubFilters = useMemo(
-    () => [
+  // "Not mapped" / "Not balanced" are reasons a transaction never became a balanced Journal
+  // Table entry - Journal Processing checks and records both directly on the transaction
+  // (lastError), so these filter the Transactions table itself rather than handing off to the
+  // Journal Table page.
+  const notCompletedSubFilters = useMemo(() => {
+    const toggle = (reason: string) => {
+      handleFiltersChange({
+        ...filters,
+        internalStatus: 'un-completed',
+        rejectionReason: filters.rejectionReason === reason ? undefined : reason,
+      })
+    }
+
+    return [
       {
         key: 'NOT_MAPPED',
         label: `Not mapped (${reasonCounts.notMapped})`,
-        active: false,
-        onClick: () =>
-          navigate('/journal', {
-            state: { initialFilters: { internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' } },
-          }),
+        active: filters.rejectionReason === 'NOT_MAPPED',
+        onClick: () => toggle('NOT_MAPPED'),
       },
       {
         key: 'NOT_BALANCED',
         label: `Not balanced (${reasonCounts.notBalanced})`,
-        active: false,
-        onClick: () =>
-          navigate('/journal', {
-            state: { initialFilters: { internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' } },
-          }),
+        active: filters.rejectionReason === 'NOT_BALANCED',
+        onClick: () => toggle('NOT_BALANCED'),
       },
-    ],
-    [navigate, reasonCounts],
-  )
+    ]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, reasonCounts])
 
   const activeSummaryCard = useMemo(() => {
     if (filters.internalStatus === 'completed') {
@@ -839,6 +839,7 @@ export function Dashboard() {
             groups={groupsPage.content}
             isLoading={isGroupsLoading}
             onSelectGroup={(group) => void handleSelectGroup(group)}
+            activeReason={filters.internalStatus === 'un-completed' ? filters.rejectionReason : undefined}
           />
 
           <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
