@@ -6,7 +6,6 @@ import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
 import { getJournalById, getJournals } from '../services/api'
 import type { Journal, PageResponse } from '../types/transaction'
-import { journalColumnLabels } from '../utils/tableFields'
 
 const initialJournalsPage: PageResponse<Journal> = {
   content: [],
@@ -24,6 +23,19 @@ function getApiErrorMessage(error: unknown) {
   return 'Unknown error'
 }
 
+// Own label set (not journalColumnLabels) - the archive's most useful extra column is the Odoo
+// reference id (proof the entry was actually received), which journalColumnLabels doesn't have.
+const archiveColumnLabels = [
+  'journal date',
+  'txn_id',
+  'journal_id',
+  'total debit',
+  'total credit',
+  'lines',
+  'odoo reference id',
+  'sent at',
+] as const
+
 function exportArchiveCsv(journals: Journal[]) {
   const rows = journals.map((journal) => [
     journal.journalDate,
@@ -35,7 +47,7 @@ function exportArchiveCsv(journals: Journal[]) {
     journal.odooReferenceId ?? '',
     journal.updatedAt,
   ])
-  const csv = [journalColumnLabels, ...rows]
+  const csv = [archiveColumnLabels, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
     .join('\n')
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
