@@ -46,7 +46,21 @@ function toInputDate(value?: string | null) {
 
 function fromInputValue(key: ColumnKey, value: string) {
   if (key === 'Date' || key === 'valueDate') {
-    return value ? new Date(value).toISOString() : null
+    // A <input type="datetime-local"> gives back a literal, zone-less string like
+    // "2026-07-10T00:00" - `new Date(value)` parses a string with no "Z"/offset as the
+    // BROWSER'S LOCAL time, so calling .toISOString() on that would silently shift it by the
+    // local UTC offset (exactly the "date short by a day" bug). Parse the literal numbers
+    // directly and anchor them to UTC instead, so what's typed is exactly what gets sent - no
+    // timezone math involved at all.
+    if (!value) {
+      return null
+    }
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+    if (!match) {
+      return null
+    }
+    const [, year, month, day, hour, minute] = match
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))).toISOString()
   }
 
   if (key === 'Journal Items/Debit' || key === 'Journal Items/Credit' || key === 'amount') {

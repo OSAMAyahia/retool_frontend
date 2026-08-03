@@ -157,13 +157,22 @@ function normalizeType(value: string | null, amount: number) {
   return amount < 0 ? 'Debit' : 'Credit'
 }
 
+// cellDates is deliberately left OFF (the default) here. SheetJS parses genuine binary .xlsx
+// serial-number date cells in a UTC-safe way, but for CSV input (and any text cell it auto-
+// detects as date-like) it falls back to `new Date(textValue)` internally, which JavaScript
+// parses in the BROWSER'S LOCAL TIMEZONE - not UTC. That silently shifted dates backward by the
+// local UTC offset (e.g. "7/10/2026" became "2026-07-09T21:00:00Z" for a UTC+3 browser, showing
+// up as the wrong day in the Review Excel Import popup). With cellDates off, date cells come
+// through as either the raw Excel serial number or the raw text, and dateAny() below already
+// parses both of those itself via UTC-safe math (excelSerialDate / parseSlashDate) - so leave
+// SheetJS out of date interpretation entirely rather than trust its inconsistent behavior.
 function readWorkbook(file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase()
   if (extension === 'csv') {
-    return file.text().then((content) => XLSX.read(content, { type: 'string', cellDates: true, dense: true }))
+    return file.text().then((content) => XLSX.read(content, { type: 'string', dense: true }))
   }
 
-  return file.arrayBuffer().then((content) => XLSX.read(content, { cellDates: true, dense: true }))
+  return file.arrayBuffer().then((content) => XLSX.read(content, { dense: true }))
 }
 
 // Deliberately built from business fields only (no row index): the same real transaction
