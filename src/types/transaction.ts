@@ -16,7 +16,7 @@ export interface Transaction {
   valueDate: string | null
   retryCount: number
   lastError: string | null
-  notCompletedReason?: 'NOT_MAPPED' | 'NOT_BALANCED' | 'OTHER' | null
+  notCompletedReason?: 'NOT_MAPPED' | 'NOT_BALANCED' | 'DIFFERENCE_ACCOUNT_MISSING' | 'OTHER' | null
   odooReferenceId: string | null
   createdAt: string
   updatedAt: string
@@ -31,6 +31,9 @@ export interface JournalLine {
   credit: number | null
   analytic: string | null
   rawPayload?: unknown
+  // True only for a synthetic line the backend generated to absorb a small (<= 0.5)
+  // debit/credit rounding gap on the mapping table's designated difference account.
+  difference?: boolean
 }
 
 export interface Journal {

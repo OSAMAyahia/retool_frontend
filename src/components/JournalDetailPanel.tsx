@@ -151,8 +151,15 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {journal.lines.length ? journal.lines.map((line) => (
-                    <tr key={line.transactionId}>
-                      <td className="max-w-64 break-words px-4 py-3 font-medium text-slate-900">{line.itemLabel ?? '-'}</td>
+                    <tr key={line.transactionId} className={line.difference ? 'bg-amber-50' : undefined}>
+                      <td className="max-w-64 break-words px-4 py-3 font-medium text-slate-900">
+                        {line.itemLabel ?? '-'}
+                        {line.difference ? (
+                          <span className="ml-2 inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                            Difference
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3 font-mono font-semibold text-slate-800">{line.itemAccount || '-'}</td>
                       <td className="px-4 py-3 font-bold tabular-nums text-slate-900">{formatMoney(line.debit)}</td>
                       <td className="px-4 py-3 font-bold tabular-nums text-slate-900">{formatMoney(line.credit)}</td>

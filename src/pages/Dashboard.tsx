@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -16,12 +17,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { ExcelImportModal } from '../components/ExcelImportModal'
 import { FilterBar } from '../components/FilterBar'
+import { NotMappedAccountsModal } from '../components/NotMappedAccountsModal'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
 import { TransactionTable } from '../components/TransactionTable'
 import {
   getJournals,
+  getNotMappedAccounts,
   getSources,
   getTransactionById,
   getTransactionGroups,
@@ -177,8 +180,24 @@ export function Dashboard() {
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [statusCounts, setStatusCounts] = useState({ completed: 0, unCompleted: 0 })
-  const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0 })
+  const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0, differenceAccountMissing: 0 })
   const [uploadProgress, setUploadProgress] = useState<{ label: string; subLabel?: string; percent: number | null } | null>(null)
+  const [isNotMappedAccountsOpen, setIsNotMappedAccountsOpen] = useState(false)
+  const [notMappedAccounts, setNotMappedAccounts] = useState<string[]>([])
+  const [isLoadingNotMappedAccounts, setIsLoadingNotMappedAccounts] = useState(false)
+
+  const handleOpenNotMappedAccounts = useCallback(async () => {
+    setIsNotMappedAccountsOpen(true)
+    setIsLoadingNotMappedAccounts(true)
+    try {
+      const accounts = await getNotMappedAccounts()
+      setNotMappedAccounts(accounts)
+    } catch {
+      setNotMappedAccounts([])
+    } finally {
+      setIsLoadingNotMappedAccounts(false)
+    }
+  }, [])
 
   const loadTransactions = useCallback(
     async (showLoading = true, overrideFilters?: TransactionFilters, overridePage?: number) => {
@@ -241,20 +260,25 @@ export function Dashboard() {
   // so these are transaction-table counts, not Journal-level ones.
   const loadTransactionStatusCounts = useCallback(async () => {
     try {
-      const [completedResponse, unCompletedResponse, notMappedResponse, notBalancedResponse] = await Promise.all([
+      const [completedResponse, unCompletedResponse, notMappedResponse, notBalancedResponse, differenceAccountMissingResponse] = await Promise.all([
         getTransactions({ internalStatus: 'completed' }, 0, 1),
         getTransactions({ internalStatus: 'un-completed' }, 0, 1),
         getTransactions({ internalStatus: 'un-completed', rejectionReason: 'NOT_MAPPED' }, 0, 1),
         getTransactions({ internalStatus: 'un-completed', rejectionReason: 'NOT_BALANCED' }, 0, 1),
+        getTransactions({ internalStatus: 'un-completed', rejectionReason: 'DIFFERENCE_ACCOUNT_MISSING' }, 0, 1),
       ])
       setStatusCounts({
         completed: completedResponse.totalElements,
         unCompleted: unCompletedResponse.totalElements,
       })
-      setReasonCounts({ notMapped: notMappedResponse.totalElements, notBalanced: notBalancedResponse.totalElements })
+      setReasonCounts({
+        notMapped: notMappedResponse.totalElements,
+        notBalanced: notBalancedResponse.totalElements,
+        differenceAccountMissing: differenceAccountMissingResponse.totalElements,
+      })
     } catch {
       setStatusCounts({ completed: 0, unCompleted: 0 })
-      setReasonCounts({ notMapped: 0, notBalanced: 0 })
+      setReasonCounts({ notMapped: 0, notBalanced: 0, differenceAccountMissing: 0 })
     }
   }, [])
 
@@ -356,6 +380,12 @@ export function Dashboard() {
         label: `Not balanced (${reasonCounts.notBalanced})`,
         active: filters.rejectionReason === 'NOT_BALANCED',
         onClick: () => toggle('NOT_BALANCED'),
+      },
+      {
+        key: 'DIFFERENCE_ACCOUNT_MISSING',
+        label: `Difference account missing (${reasonCounts.differenceAccountMissing})`,
+        active: filters.rejectionReason === 'DIFFERENCE_ACCOUNT_MISSING',
+        onClick: () => toggle('DIFFERENCE_ACCOUNT_MISSING'),
       },
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -676,6 +706,14 @@ export function Dashboard() {
               ) : null}
             </div>
             <button
+              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#b45309] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+              type="button"
+              onClick={() => void handleOpenNotMappedAccounts()}
+            >
+              <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+              Not Mapped Accounts
+            </button>
+            <button
               className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
               onClick={() => {
@@ -917,6 +955,13 @@ export function Dashboard() {
         onRetry={handleRetry}
         onSelectFromGroup={(transaction) => void handleSelectTransaction(transaction)}
       />
+      {isNotMappedAccountsOpen ? (
+        <NotMappedAccountsModal
+          accounts={notMappedAccounts}
+          isLoading={isLoadingNotMappedAccounts}
+          onClose={() => setIsNotMappedAccountsOpen(false)}
+        />
+      ) : null}
     </main>
   )
 }

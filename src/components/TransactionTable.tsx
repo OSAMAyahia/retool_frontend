@@ -18,6 +18,9 @@ function reasonTagLabel(reason?: string) {
   if (reason === 'NOT_BALANCED') {
     return 'Not balanced'
   }
+  if (reason === 'DIFFERENCE_ACCOUNT_MISSING') {
+    return 'Difference account missing'
+  }
   return null
 }
 

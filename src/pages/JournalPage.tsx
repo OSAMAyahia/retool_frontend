@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
@@ -412,6 +413,13 @@ export function JournalPage() {
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to Dashboard
+            </Link>
+            <Link
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#dfe6f4] bg-white/80 px-4 text-xs font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+              to="/archive"
+            >
+              <Archive className="h-4 w-4" aria-hidden="true" />
+              Archive
             </Link>
             <div className="relative">
               <button

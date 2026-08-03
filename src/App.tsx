@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AdminPage } from './pages/AdminPage'
+import { ArchivePage } from './pages/ArchivePage'
 import { Dashboard } from './pages/Dashboard'
 import { JournalPage } from './pages/JournalPage'
 import { LoginPage } from './pages/LoginPage'
@@ -25,6 +26,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <JournalPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/archive"
+            element={
+              <ProtectedRoute>
+                <ArchivePage />
               </ProtectedRoute>
             }
           />

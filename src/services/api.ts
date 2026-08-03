@@ -630,6 +630,13 @@ export async function getSources(): Promise<string[]> {
   return response.data
 }
 
+// Deduplicated account_numbers currently held back because they have no Odoo mapping-table
+// record - backs the "Not Mapped Accounts" popup.
+export async function getNotMappedAccounts(): Promise<string[]> {
+  const response = await api.get<string[]>('/transactions/not-mapped-accounts')
+  return response.data
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const response = await api.post<LoginResponse>('/admin/auth/login', { username, password })
   setStoredAuthToken(response.data.token)
