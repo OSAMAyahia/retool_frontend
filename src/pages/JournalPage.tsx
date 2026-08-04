@@ -19,6 +19,7 @@ import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
+import { Toast, type ToastMessage } from '../components/Toast'
 import { archiveJournals, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
 import { displayDate, journalColumnLabels } from '../utils/tableFields'
@@ -163,6 +164,7 @@ export function JournalPage() {
   const [statusCounts, setStatusCounts] = useState({ total: 0, sent: 0 })
   const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0 })
   const [sendProgress, setSendProgress] = useState<{ label: string; subLabel: string } | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
 
   const summary = useMemo(
     () => buildJournalSummary(statusCounts.total, statusCounts.sent),
@@ -398,9 +400,18 @@ export function JournalPage() {
   }
 
   // Manual, user-initiated archiving - only fires when the user selects SENT rows themselves
-  // and presses this button. Never triggered by handleSendToOdoo above.
+  // and presses this button. Never triggered by handleSendToOdoo above. A selection with no
+  // SENT rows at all is rejected up front with a toast instead of silently doing nothing, so
+  // the user gets clear feedback on why the button didn't archive anything.
   const handleArchiveSelected = async () => {
+    if (selectedIds.size === 0) {
+      return
+    }
     if (selectedSentIds.length === 0) {
+      setToast({
+        tone: 'error',
+        text: 'Only Sent journal entries can be archived - none of the selected rows have been sent to Odoo yet.',
+      })
       return
     }
     setIsActionLoading(true)
@@ -408,11 +419,13 @@ export function JournalPage() {
     setActionError(null)
     try {
       const result = await archiveJournals(selectedSentIds)
-      setActionMessage(
-        result.skipped.length > 0
-          ? `Archived ${result.archived} journal entries. ${result.skipped.length} could not be archived (not yet sent).`
-          : `Archived ${result.archived} journal entries.`,
-      )
+      setActionMessage(`Archived ${result.archived} journal entries.`)
+      if (result.skipped.length > 0) {
+        setToast({
+          tone: 'error',
+          text: `${result.skipped.length} of the selected rows could not be archived (not sent) and were skipped.`,
+        })
+      }
       setSelectedIds(new Set())
       await loadJournals(false)
       await loadStatusCounts()
@@ -521,7 +534,7 @@ export function JournalPage() {
               className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#bfead9] bg-[#ecfdf5] px-4 text-xs font-extrabold text-[#047857] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={() => void handleArchiveSelected()}
-              disabled={isActionLoading || selectedSentIds.length === 0}
+              disabled={isActionLoading || selectedIds.size === 0}
               title={
                 selectedSentIds.length > 0
                   ? `Archive ${selectedSentIds.length} selected (sent) journal entries`
@@ -642,6 +655,7 @@ export function JournalPage() {
         </div>
       </section>
       <JournalDetailPanel journal={selectedJournal} onClose={() => setSelectedJournal(null)} />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>
   )
 }
