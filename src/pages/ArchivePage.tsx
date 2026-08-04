@@ -58,10 +58,10 @@ function exportArchiveCsv(journals: Journal[]) {
   URL.revokeObjectURL(url)
 }
 
-// Read-only view over every journal entry successfully sent to Odoo (status SENT). These rows
-// are never deleted from the journal_entries/journals tables - this page is just a permanently
-// filtered lens onto that same storage, so it always reflects the full send history without
-// duplicating any data into a second table.
+// Read-only view over every journal entry successfully sent to Odoo. Backed by its own
+// dedicated archive tables (see JournalStatusService.markSent on the backend) - the moment an
+// entry is sent it's moved OUT of the live journal_entries/journals tables and into these, so
+// this page is the only place a sent entry is still visible.
 export function ArchivePage() {
   const { user, logout } = useAuth()
   const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
