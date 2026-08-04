@@ -65,9 +65,17 @@ const journalStatuses: TransactionStatus[] = [
     createdAt: '',
     updatedAt: '',
   },
-  // "Sent" is deliberately not offered as a selectable filter here - once a journal entry is
-  // sent to Odoo it moves to the Archive page instead of remaining visible in this table (see
-  // loadJournals below), so there would be nothing for this filter to ever show.
+  {
+    code: 'SENT',
+    label: 'Sent',
+    description: null,
+    color: '#059669',
+    sortOrder: 40,
+    systemStatus: true,
+    editable: false,
+    createdAt: '',
+    updatedAt: '',
+  },
   {
     code: 'REJECTED',
     label: 'Rejected',
@@ -209,15 +217,15 @@ export function JournalPage() {
       }
 
       try {
-        // Once a journal entry is sent to Odoo it belongs on the Archive page, not here - a
-        // blank/unset status filter (or an explicit "SENT", which the UI no longer offers but a
-        // stale deep link could still carry) is always treated as "not yet sent" so a sent
-        // entry never reappears in this table after the next refresh.
+        // A blank/unset status filter defaults to "not yet sent" so a just-sent entry
+        // disappears from the default view on the next refresh instead of lingering here. An
+        // EXPLICIT "SENT" filter (the "Completed" card, or picking it from the status dropdown)
+        // is left as-is - that's a deliberate in-place look at sent entries, not the default
+        // view, so it should actually show them rather than being silently forced back to
+        // NOT_SENT.
         const effectiveFilters = {
           ...filters,
-          internalStatus: !filters.internalStatus || filters.internalStatus === 'SENT'
-            ? 'NOT_SENT'
-            : filters.internalStatus,
+          internalStatus: filters.internalStatus || 'NOT_SENT',
         }
         const response = await getJournals(effectiveFilters, page, 50)
         setJournalsPage(response)
@@ -274,13 +282,13 @@ export function JournalPage() {
   }
 
   // Clicking a summary card filters the table below to that bucket. "Not completed" has no
-  // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT".
-  // Sent entries live on the Archive page, not in this table (see loadJournals above) - so
-  // "Completed" now points there instead of trying to filter the table to a status it will
-  // never show.
+  // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT". All cards
+  // filter this same table in place - "Completed" included, even though sent entries are hidden
+  // by default (see loadJournals above), clicking it explicitly asks to see them and should
+  // show them right here, not send the user off to a different page.
   const handleSummaryCardClick = (key: 'total' | 'completed' | 'unCompleted' | 'journalRows') => {
     if (key === 'completed') {
-      navigate('/archive')
+      handleFiltersChange({ ...filters, internalStatus: 'SENT', rejectionReason: undefined })
       return
     }
     if (key === 'unCompleted') {
@@ -291,6 +299,9 @@ export function JournalPage() {
   }
 
   const activeSummaryCard = useMemo(() => {
+    if (filters.internalStatus === 'SENT') {
+      return 'completed' as const
+    }
     if (filters.internalStatus === 'NOT_SENT' || filters.rejectionReason) {
       return 'unCompleted' as const
     }
@@ -371,6 +382,12 @@ export function JournalPage() {
       setSelectedIds(new Set())
       await loadJournals(false)
       await loadStatusCounts()
+      // Whatever just got sent (whether the user picked specific rows or "send everything
+      // eligible") is now on the Archive page and no longer in this table - jump there so they
+      // land straight on what they just sent, instead of a Journal Table that just lost rows.
+      if (result.processed > 0) {
+        navigate('/archive')
+      }
     } catch (error) {
       setSendProgress(null)
       await loadJournals(false)
@@ -395,7 +412,7 @@ export function JournalPage() {
               Journal Table
             </h1>
             <p className="mt-2 max-w-2xl text-sm font-medium text-[#617096]">
-              One balanced record per txn_id. Click any record to inspect every debit and credit line.
+              One balanced record per txn_id and value_date. Click any record to inspect every debit and credit line.
             </p>
           </div>
 

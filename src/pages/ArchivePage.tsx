@@ -70,6 +70,9 @@ export function ArchivePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Individual or select-all, same pattern as the Journal Table - used to narrow the CSV export
+  // to just the checked rows (an empty selection exports every row on the current page).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const loadArchive = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -99,6 +102,32 @@ export function ArchivePage() {
     } catch {
       setSelectedJournal(journal)
     }
+  }
+
+  const handleToggleRow = (transactionId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(transactionId)) {
+        next.delete(transactionId)
+      } else {
+        next.add(transactionId)
+      }
+      return next
+    })
+  }
+
+  const handleToggleAll = () => {
+    setSelectedIds((current) => {
+      const allSelected = journalsPage.content.every((journal) => current.has(journal.transactionId))
+      if (allSelected) {
+        const next = new Set(current)
+        journalsPage.content.forEach((journal) => next.delete(journal.transactionId))
+        return next
+      }
+      const next = new Set(current)
+      journalsPage.content.forEach((journal) => next.add(journal.transactionId))
+      return next
+    })
   }
 
   const canGoBack = page > 0
@@ -132,11 +161,15 @@ export function ArchivePage() {
             <button
               className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
-              onClick={() => exportArchiveCsv(journalsPage.content)}
+              onClick={() => exportArchiveCsv(
+                selectedIds.size > 0
+                  ? journalsPage.content.filter((journal) => selectedIds.has(journal.transactionId))
+                  : journalsPage.content,
+              )}
               disabled={journalsPage.content.length === 0}
             >
               <Download className="h-5 w-5" aria-hidden="true" />
-              Export CSV
+              {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : 'Export CSV'}
             </button>
             <button
               className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
@@ -178,9 +211,9 @@ export function ArchivePage() {
             journals={journalsPage.content}
             isLoading={isLoading}
             onSelect={(journal) => void handleSelectJournal(journal)}
-            selectedIds={new Set()}
-            onToggleRow={() => {}}
-            onToggleAll={() => {}}
+            selectedIds={selectedIds}
+            onToggleRow={handleToggleRow}
+            onToggleAll={handleToggleAll}
           />
         </div>
 
