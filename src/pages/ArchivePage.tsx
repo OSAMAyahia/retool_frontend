@@ -58,10 +58,10 @@ function exportArchiveCsv(journals: Journal[]) {
   URL.revokeObjectURL(url)
 }
 
-// Read-only view over every journal entry successfully sent to Odoo. Backed by its own
-// dedicated archive tables (see JournalStatusService.markSent on the backend) - the moment an
-// entry is sent it's moved OUT of the live journal_entries/journals tables and into these, so
-// this page is the only place a sent entry is still visible.
+// Read-only view over journal entries the user has manually archived from the Journal Table
+// (see JournalStatusService.archiveIfSent on the backend) - sending to Odoo alone leaves an
+// entry visible in the Journal Table with status SENT; only the explicit "Archive Selected"
+// action there moves it out of the live journal_entries/journals tables and into these.
 export function ArchivePage() {
   const { user, logout } = useAuth()
   const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
@@ -144,7 +144,7 @@ export function ArchivePage() {
             </Link>
             <h1 className="text-3xl font-extrabold tracking-normal text-[#111b45] lg:text-[34px]">Archive</h1>
             <p className="mt-2 text-base font-medium text-[#617096]">
-              Every journal entry successfully sent to Odoo ({journalsPage.totalElements} total)
+              Journal entries you've manually archived from the Journal Table ({journalsPage.totalElements} total)
             </p>
           </div>
 

@@ -19,7 +19,7 @@ import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
-import { getArchive, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
+import { archiveJournals, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
 import { displayDate, journalColumnLabels } from '../utils/tableFields'
 
@@ -65,9 +65,17 @@ const journalStatuses: TransactionStatus[] = [
     createdAt: '',
     updatedAt: '',
   },
-  // "Sent" is deliberately not offered as a filter here - the moment an entry is sent it moves
-  // OUT of this table entirely into the archive tables (see JournalStatusService.markSent), so
-  // there's nothing left here for this status to ever match.
+  {
+    code: 'SENT',
+    label: 'Sent',
+    description: null,
+    color: '#08b86f',
+    sortOrder: 40,
+    systemStatus: true,
+    editable: false,
+    createdAt: '',
+    updatedAt: '',
+  },
   {
     code: 'REJECTED',
     label: 'Rejected',
@@ -86,15 +94,14 @@ const odooSendableStatuses = new Set(['NEW', 'REJECTED'])
 // total/sent are counted independently of whatever filters the user currently has applied on
 // the table (via dedicated size=1 requests, reading only totalElements) - summary cards should
 // always reflect the true overall numbers, not just whatever page/filter happens to be loaded.
-// `total` is a count of the live journal_entries table, which - now that a sent entry is moved
-// OUT to the archive tables the instant it's sent - already only ever holds not-yet-sent rows.
-// So unlike the old "total minus sent" math, `total` and `unCompleted` are the same number here;
-// `sent` comes from a separate archive count, not a subset of `total`.
+// A SENT entry stays in this same journal_entries table until the user manually archives it (see
+// JournalStatusService.archiveIfSent), so `total` already includes sent rows and `unCompleted`
+// is the remainder, same as any other status split.
 function buildJournalSummary(total: number, sent: number): TransactionSummary {
   return {
     total,
     completed: sent,
-    unCompleted: total,
+    unCompleted: Math.max(total - sent, 0),
     journalRows: total,
   }
 }
@@ -172,6 +179,15 @@ export function JournalPage() {
         .map((journal) => journal.transactionId),
     [journalsPage.content, selectedIds],
   )
+  // Only SENT rows can be archived - a mixed selection (some sent, some not) only archives the
+  // sent ones when the button is pressed, same filtering pattern as selectedSendableIds above.
+  const selectedSentIds = useMemo(
+    () =>
+      journalsPage.content
+        .filter((journal) => selectedIds.has(journal.transactionId) && journal.status === 'SENT')
+        .map((journal) => journal.transactionId),
+    [journalsPage.content, selectedIds],
+  )
 
   const handleToggleRow = (transactionId: string) => {
     setSelectedIds((current) => {
@@ -211,15 +227,10 @@ export function JournalPage() {
       }
 
       try {
-        // A sent entry is moved out of the live journals table the instant it's sent (see
-        // JournalStatusService.markSent), so this table can never contain a SENT row regardless
-        // of filters - defaulting a blank status to NOT_SENT just avoids an unnecessary "status
-        // != SENT" no-op filter most of the time.
-        const effectiveFilters = {
-          ...filters,
-          internalStatus: filters.internalStatus || 'NOT_SENT',
-        }
-        const response = await getJournals(effectiveFilters, page, 50)
+        // A SENT entry stays visible here (in place) until the user manually archives it, so no
+        // default status filter is applied - a blank filter shows every entry regardless of
+        // status, same as before archiving existed.
+        const response = await getJournals(filters, page, 50)
         setJournalsPage(response)
         setActionError(null)
       } catch (error) {
@@ -237,11 +248,9 @@ export function JournalPage() {
   // overall counts, not whatever subset the table happens to be filtered/paginated to.
   const loadStatusCounts = useCallback(async () => {
     try {
-      // "Sent" no longer comes from /journals - a sent entry is moved to the archive tables the
-      // instant it's sent, so its count now comes from /archive instead.
       const [totalResponse, sentResponse, notMappedResponse, notBalancedResponse] = await Promise.all([
         getJournals({}, 0, 1),
-        getArchive({}, 0, 1),
+        getJournals({ internalStatus: 'SENT' }, 0, 1),
         getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' }, 0, 1),
         getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' }, 0, 1),
       ])
@@ -275,16 +284,12 @@ export function JournalPage() {
     setPage(0)
   }
 
-  // Clicking a summary card filters the table below to that bucket. "Not completed" has no
-  // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT". Sent
-  // entries are moved to the separate archive tables the moment they're sent (see
-  // JournalStatusService.markSent) - they physically don't exist in this table's own data
-  // source anymore, so "Completed" can't filter to them in place. It goes to Archive instead,
-  // same as any other explicit navigation link - the only thing that must NOT auto-navigate is
-  // the Send action itself, which stays here so the user can review the result first.
+  // Clicking a summary card filters the table below to that bucket, in place - a SENT entry
+  // stays in this same table until the user manually archives it (see the Archive button below),
+  // so "Completed" filters to status=SENT here instead of navigating anywhere.
   const handleSummaryCardClick = (key: 'total' | 'completed' | 'unCompleted' | 'journalRows') => {
     if (key === 'completed') {
-      navigate('/archive')
+      handleFiltersChange({ ...filters, internalStatus: 'SENT', rejectionReason: undefined })
       return
     }
     if (key === 'unCompleted') {
@@ -295,6 +300,9 @@ export function JournalPage() {
   }
 
   const activeSummaryCard = useMemo(() => {
+    if (filters.internalStatus === 'SENT') {
+      return 'completed' as const
+    }
     if (filters.internalStatus === 'NOT_SENT' || filters.rejectionReason) {
       return 'unCompleted' as const
     }
@@ -384,6 +392,32 @@ export function JournalPage() {
       await loadJournals(false)
       await loadStatusCounts()
       setActionError(`Odoo update failed. ${getApiErrorMessage(error)}`)
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  // Manual, user-initiated archiving - only fires when the user selects SENT rows themselves
+  // and presses this button. Never triggered by handleSendToOdoo above.
+  const handleArchiveSelected = async () => {
+    if (selectedSentIds.length === 0) {
+      return
+    }
+    setIsActionLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+    try {
+      const result = await archiveJournals(selectedSentIds)
+      setActionMessage(
+        result.skipped.length > 0
+          ? `Archived ${result.archived} journal entries. ${result.skipped.length} could not be archived (not yet sent).`
+          : `Archived ${result.archived} journal entries.`,
+      )
+      setSelectedIds(new Set())
+      await loadJournals(false)
+      await loadStatusCounts()
+    } catch (error) {
+      setActionError(`Archiving failed. ${getApiErrorMessage(error)}`)
     } finally {
       setIsActionLoading(false)
     }
@@ -482,6 +516,20 @@ export function JournalPage() {
             >
               <Send className="h-4 w-4" aria-hidden="true" />
               {selectedSendableIds.length > 0 ? `Send Selected (${selectedSendableIds.length})` : 'Send to Odoo'}
+            </button>
+            <button
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#bfead9] bg-[#ecfdf5] px-4 text-xs font-extrabold text-[#047857] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              onClick={() => void handleArchiveSelected()}
+              disabled={isActionLoading || selectedSentIds.length === 0}
+              title={
+                selectedSentIds.length > 0
+                  ? `Archive ${selectedSentIds.length} selected (sent) journal entries`
+                  : 'Select one or more Sent rows to archive them'
+              }
+            >
+              <Archive className="h-4 w-4" aria-hidden="true" />
+              {selectedSentIds.length > 0 ? `Archive Selected (${selectedSentIds.length})` : 'Archive Selected'}
             </button>
             <button
               className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"

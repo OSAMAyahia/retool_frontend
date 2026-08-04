@@ -635,6 +635,14 @@ export async function sendJournalsToOdoo(
   throw new Error('Sending journals to Odoo did not finish within 30 minutes')
 }
 
+// Manual archiving only - the user selects specific SENT rows in the Journal Table and presses
+// an Archive button. Never called automatically after sendJournalsToOdoo above; sending and
+// archiving are two separate, deliberate actions.
+export async function archiveJournals(transactionIds: string[]): Promise<{ archived: number; skipped: string[] }> {
+  const response = await api.post<{ archived: number; skipped: string[] }>('/journals/archive', { transactionIds })
+  return response.data
+}
+
 export async function getTransactionById(transactionId: string): Promise<Transaction> {
   const response = await api.get<BackendTransaction>(`/transactions/${encodeURIComponent(transactionId)}`)
   return normalizeTransaction(response.data)
