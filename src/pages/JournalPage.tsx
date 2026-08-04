@@ -65,17 +65,9 @@ const journalStatuses: TransactionStatus[] = [
     createdAt: '',
     updatedAt: '',
   },
-  {
-    code: 'SENT',
-    label: 'Sent',
-    description: null,
-    color: '#059669',
-    sortOrder: 40,
-    systemStatus: true,
-    editable: false,
-    createdAt: '',
-    updatedAt: '',
-  },
+  // "Sent" is deliberately not offered as a selectable filter here - once a journal entry is
+  // sent to Odoo it moves to the Archive page instead of remaining visible in this table (see
+  // loadJournals below), so there would be nothing for this filter to ever show.
   {
     code: 'REJECTED',
     label: 'Rejected',
@@ -217,7 +209,17 @@ export function JournalPage() {
       }
 
       try {
-        const response = await getJournals(filters, page, 50)
+        // Once a journal entry is sent to Odoo it belongs on the Archive page, not here - a
+        // blank/unset status filter (or an explicit "SENT", which the UI no longer offers but a
+        // stale deep link could still carry) is always treated as "not yet sent" so a sent
+        // entry never reappears in this table after the next refresh.
+        const effectiveFilters = {
+          ...filters,
+          internalStatus: !filters.internalStatus || filters.internalStatus === 'SENT'
+            ? 'NOT_SENT'
+            : filters.internalStatus,
+        }
+        const response = await getJournals(effectiveFilters, page, 50)
         setJournalsPage(response)
         setActionError(null)
       } catch (error) {
@@ -273,9 +275,12 @@ export function JournalPage() {
 
   // Clicking a summary card filters the table below to that bucket. "Not completed" has no
   // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT".
+  // Sent entries live on the Archive page, not in this table (see loadJournals above) - so
+  // "Completed" now points there instead of trying to filter the table to a status it will
+  // never show.
   const handleSummaryCardClick = (key: 'total' | 'completed' | 'unCompleted' | 'journalRows') => {
     if (key === 'completed') {
-      handleFiltersChange({ ...filters, internalStatus: 'SENT', rejectionReason: undefined })
+      navigate('/archive')
       return
     }
     if (key === 'unCompleted') {
@@ -286,9 +291,6 @@ export function JournalPage() {
   }
 
   const activeSummaryCard = useMemo(() => {
-    if (filters.internalStatus === 'SENT') {
-      return 'completed' as const
-    }
     if (filters.internalStatus === 'NOT_SENT' || filters.rejectionReason) {
       return 'unCompleted' as const
     }
