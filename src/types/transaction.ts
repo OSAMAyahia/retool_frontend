@@ -31,7 +31,7 @@ export interface JournalLine {
   credit: number | null
   analytic: string | null
   rawPayload?: unknown
-  // True only for a synthetic line the backend generated to absorb a small (<= 0.5)
+  // True only for a synthetic line the backend generated to absorb a small (<= 0.05)
   // debit/credit rounding gap on the mapping table's designated difference account.
   difference?: boolean
 }
