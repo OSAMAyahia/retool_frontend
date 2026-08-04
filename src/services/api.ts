@@ -567,6 +567,33 @@ export async function getJournalById(transactionId: string): Promise<Journal> {
   return normalizeJournal(response.data)
 }
 
+// Backed by the dedicated archive tables (see JournalStatusService.markSent), not a status=SENT
+// filter over /journals - a sent entry is moved OUT of the live journal_entries/journals tables
+// the instant it's sent, so it would never show up there again regardless of filter.
+export async function getArchive(
+  filters: { source?: string; accountId?: string; dateFrom?: string; dateTo?: string },
+  page: number,
+  size: number,
+): Promise<PageResponse<Journal>> {
+  const response = await api.get<BackendPage<BackendJournal> | BackendJournal[]>('/archive', {
+    params: {
+      page,
+      size,
+      journal: filters.source || undefined,
+      account: filters.accountId || undefined,
+      dateFrom: toDateTimeFrom(filters.dateFrom),
+      dateTo: toDateTimeTo(filters.dateTo),
+    },
+  })
+
+  return normalizeJournalPage(response.data)
+}
+
+export async function getArchivedJournalById(transactionId: string): Promise<Journal> {
+  const response = await api.get<BackendJournal>(`/archive/${encodeURIComponent(transactionId)}`)
+  return normalizeJournal(response.data)
+}
+
 // /journals/send-to-odoo now starts a background job for the same reason
 // /journals/process does (see processJournals above): a large backlog of entries, each
 // requiring its own external Odoo call, can take well past a reverse proxy's timeout.

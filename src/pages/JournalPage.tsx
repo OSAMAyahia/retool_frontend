@@ -19,7 +19,7 @@ import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
-import { getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
+import { getArchive, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
 import { displayDate, journalColumnLabels } from '../utils/tableFields'
 
@@ -65,17 +65,9 @@ const journalStatuses: TransactionStatus[] = [
     createdAt: '',
     updatedAt: '',
   },
-  {
-    code: 'SENT',
-    label: 'Sent',
-    description: null,
-    color: '#059669',
-    sortOrder: 40,
-    systemStatus: true,
-    editable: false,
-    createdAt: '',
-    updatedAt: '',
-  },
+  // "Sent" is deliberately not offered as a filter here - the moment an entry is sent it moves
+  // OUT of this table entirely into the archive tables (see JournalStatusService.markSent), so
+  // there's nothing left here for this status to ever match.
   {
     code: 'REJECTED',
     label: 'Rejected',
@@ -94,13 +86,15 @@ const odooSendableStatuses = new Set(['NEW', 'REJECTED'])
 // total/sent are counted independently of whatever filters the user currently has applied on
 // the table (via dedicated size=1 requests, reading only totalElements) - summary cards should
 // always reflect the true overall numbers, not just whatever page/filter happens to be loaded.
+// `total` is a count of the live journal_entries table, which - now that a sent entry is moved
+// OUT to the archive tables the instant it's sent - already only ever holds not-yet-sent rows.
+// So unlike the old "total minus sent" math, `total` and `unCompleted` are the same number here;
+// `sent` comes from a separate archive count, not a subset of `total`.
 function buildJournalSummary(total: number, sent: number): TransactionSummary {
-  const unCompleted = Math.max(total - sent, 0)
-
   return {
     total,
     completed: sent,
-    unCompleted,
+    unCompleted: total,
     journalRows: total,
   }
 }
@@ -217,12 +211,10 @@ export function JournalPage() {
       }
 
       try {
-        // A blank/unset status filter defaults to "not yet sent" so a just-sent entry
-        // disappears from the default view on the next refresh instead of lingering here. An
-        // EXPLICIT "SENT" filter (the "Completed" card, or picking it from the status dropdown)
-        // is left as-is - that's a deliberate in-place look at sent entries, not the default
-        // view, so it should actually show them rather than being silently forced back to
-        // NOT_SENT.
+        // A sent entry is moved out of the live journals table the instant it's sent (see
+        // JournalStatusService.markSent), so this table can never contain a SENT row regardless
+        // of filters - defaulting a blank status to NOT_SENT just avoids an unnecessary "status
+        // != SENT" no-op filter most of the time.
         const effectiveFilters = {
           ...filters,
           internalStatus: filters.internalStatus || 'NOT_SENT',
@@ -245,9 +237,11 @@ export function JournalPage() {
   // overall counts, not whatever subset the table happens to be filtered/paginated to.
   const loadStatusCounts = useCallback(async () => {
     try {
+      // "Sent" no longer comes from /journals - a sent entry is moved to the archive tables the
+      // instant it's sent, so its count now comes from /archive instead.
       const [totalResponse, sentResponse, notMappedResponse, notBalancedResponse] = await Promise.all([
         getJournals({}, 0, 1),
-        getJournals({ internalStatus: 'SENT' }, 0, 1),
+        getArchive({}, 0, 1),
         getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_MAPPED' }, 0, 1),
         getJournals({ internalStatus: 'NOT_SENT', rejectionReason: 'NOT_BALANCED' }, 0, 1),
       ])
@@ -282,13 +276,15 @@ export function JournalPage() {
   }
 
   // Clicking a summary card filters the table below to that bucket. "Not completed" has no
-  // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT". All cards
-  // filter this same table in place - "Completed" included, even though sent entries are hidden
-  // by default (see loadJournals above), clicking it explicitly asks to see them and should
-  // show them right here, not send the user off to a different page.
+  // single backend status - "NOT_SENT" is a synthetic value meaning "status != SENT". Sent
+  // entries are moved to the separate archive tables the moment they're sent (see
+  // JournalStatusService.markSent) - they physically don't exist in this table's own data
+  // source anymore, so "Completed" can't filter to them in place. It goes to Archive instead,
+  // same as any other explicit navigation link - the only thing that must NOT auto-navigate is
+  // the Send action itself, which stays here so the user can review the result first.
   const handleSummaryCardClick = (key: 'total' | 'completed' | 'unCompleted' | 'journalRows') => {
     if (key === 'completed') {
-      handleFiltersChange({ ...filters, internalStatus: 'SENT', rejectionReason: undefined })
+      navigate('/archive')
       return
     }
     if (key === 'unCompleted') {
@@ -299,9 +295,6 @@ export function JournalPage() {
   }
 
   const activeSummaryCard = useMemo(() => {
-    if (filters.internalStatus === 'SENT') {
-      return 'completed' as const
-    }
     if (filters.internalStatus === 'NOT_SENT' || filters.rejectionReason) {
       return 'unCompleted' as const
     }
@@ -380,14 +373,12 @@ export function JournalPage() {
         `Sent ${result.processed} journal entries to Odoo. Rejected entries include the exact error and can be retried.`,
       )
       setSelectedIds(new Set())
+      // Deliberately does NOT auto-navigate to Archive - sending is one action, looking at the
+      // Archive is a separate, deliberate one the user chooses for themselves (via the
+      // "Completed" card or the Archive link), not something that should whisk them away right
+      // after they click Send.
       await loadJournals(false)
       await loadStatusCounts()
-      // Whatever just got sent (whether the user picked specific rows or "send everything
-      // eligible") is now on the Archive page and no longer in this table - jump there so they
-      // land straight on what they just sent, instead of a Journal Table that just lost rows.
-      if (result.processed > 0) {
-        navigate('/archive')
-      }
     } catch (error) {
       setSendProgress(null)
       await loadJournals(false)

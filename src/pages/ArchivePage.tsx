@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
-import { getJournalById, getJournals } from '../services/api'
+import { getArchive, getArchivedJournalById } from '../services/api'
 import type { Journal, PageResponse } from '../types/transaction'
 
 const initialJournalsPage: PageResponse<Journal> = {
@@ -79,7 +79,7 @@ export function ArchivePage() {
       setIsLoading(true)
     }
     try {
-      const response = await getJournals({ internalStatus: 'SENT' }, page, 50)
+      const response = await getArchive({}, page, 50)
       setJournalsPage(response)
       setLoadError(null)
     } catch (error) {
@@ -97,7 +97,7 @@ export function ArchivePage() {
 
   const handleSelectJournal = async (journal: Journal) => {
     try {
-      const full = await getJournalById(journal.transactionId)
+      const full = await getArchivedJournalById(journal.transactionId)
       setSelectedJournal(full)
     } catch {
       setSelectedJournal(journal)
