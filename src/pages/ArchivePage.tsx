@@ -1,10 +1,11 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, LogOut, RefreshCw, RotateCw, ShieldCheck } from 'lucide-react'
+import { ArchiveRestore, ArrowLeft, ChevronLeft, ChevronRight, Download, LogOut, RefreshCw, RotateCw, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
-import { getArchive, getArchivedJournalById } from '../services/api'
+import { Toast, type ToastMessage } from '../components/Toast'
+import { getArchive, getArchivedJournalById, unarchiveJournals } from '../services/api'
 import type { Journal, PageResponse } from '../types/transaction'
 
 const initialJournalsPage: PageResponse<Journal> = {
@@ -58,10 +59,11 @@ function exportArchiveCsv(journals: Journal[]) {
   URL.revokeObjectURL(url)
 }
 
-// Read-only view over journal entries the user has manually archived from the Journal Table
-// (see JournalStatusService.archiveIfSent on the backend) - sending to Odoo alone leaves an
-// entry visible in the Journal Table with status SENT; only the explicit "Archive Selected"
-// action there moves it out of the live journal_entries/journals tables and into these.
+// View over journal entries the user has manually archived from the Journal Table (see
+// JournalStatusService.archiveIfSent on the backend) - sending to Odoo alone leaves an entry
+// visible in the Journal Table with status SENT; only the explicit "Archive Selected" action
+// there moves it out of the live journal_entries/journals tables and into these. "Unarchive
+// Selected" below reverses that (JournalStatusService.unarchiveIfArchived), moving rows back.
 export function ArchivePage() {
   const { user, logout } = useAuth()
   const [journalsPage, setJournalsPage] = useState<PageResponse<Journal>>(initialJournalsPage)
@@ -71,8 +73,13 @@ export function ArchivePage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   // Individual or select-all, same pattern as the Journal Table - used to narrow the CSV export
-  // to just the checked rows (an empty selection exports every row on the current page).
+  // to just the checked rows (an empty selection exports every row on the current page), and to
+  // pick which rows Unarchive Selected below sends back to the Journal Table.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isActionLoading, setIsActionLoading] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
 
   const loadArchive = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -130,6 +137,35 @@ export function ArchivePage() {
     })
   }
 
+  // Manual, user-initiated unarchiving - the reverse of handleArchiveSelected on the Journal
+  // Table page (see ArchiveController.unarchiveEntries / JournalStatusService.unarchiveIfArchived
+  // on the backend). Moves the selected rows out of the archive tables and back into the live
+  // journal_entries/journals tables, so they reappear in the Journal Table.
+  const handleUnarchiveSelected = async () => {
+    if (selectedIds.size === 0) {
+      return
+    }
+    setIsActionLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+    try {
+      const result = await unarchiveJournals(Array.from(selectedIds))
+      setActionMessage(`Unarchived ${result.unarchived} journal entries back to the Journal Table.`)
+      if (result.skipped.length > 0) {
+        setToast({
+          tone: 'error',
+          text: `${result.skipped.length} of the selected rows could not be unarchived and were skipped.`,
+        })
+      }
+      setSelectedIds(new Set())
+      await loadArchive(false)
+    } catch (error) {
+      setActionError(`Unarchiving failed. ${getApiErrorMessage(error)}`)
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   const canGoBack = page > 0
   const canGoForward = journalsPage.totalPages > 0 && page + 1 < journalsPage.totalPages
 
@@ -172,6 +208,20 @@ export function ArchivePage() {
               {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : 'Export CSV'}
             </button>
             <button
+              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#bfead9] bg-[#ecfdf5] px-5 text-sm font-bold text-[#047857] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              onClick={() => void handleUnarchiveSelected()}
+              disabled={isActionLoading || selectedIds.size === 0}
+              title={
+                selectedIds.size > 0
+                  ? `Unarchive ${selectedIds.size} selected journal entries back to the Journal Table`
+                  : 'Select one or more rows to unarchive them'
+              }
+            >
+              <ArchiveRestore className="h-5 w-5" aria-hidden="true" />
+              {selectedIds.size > 0 ? `Unarchive Selected (${selectedIds.size})` : 'Unarchive Selected'}
+            </button>
+            <button
               className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
               onClick={() => void loadArchive()}
@@ -203,6 +253,16 @@ export function ArchivePage() {
         {loadError ? (
           <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {loadError}
+          </div>
+        ) : null}
+        {actionMessage ? (
+          <div className="mb-5 rounded-2xl border border-[#bfead9] bg-[#ecfdf5] px-5 py-4 text-sm font-bold text-[#047857]">
+            {actionMessage}
+          </div>
+        ) : null}
+        {actionError ? (
+          <div className="mb-5 rounded-2xl border border-[#ffb8c2] bg-[#fff1f2] px-5 py-4 text-sm font-bold text-[#dc2626]">
+            {actionError}
           </div>
         ) : null}
 
@@ -245,6 +305,7 @@ export function ArchivePage() {
       </section>
 
       <JournalDetailPanel journal={selectedJournal} onClose={() => setSelectedJournal(null)} />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>
   )
 }

@@ -643,6 +643,14 @@ export async function archiveJournals(transactionIds: string[]): Promise<{ archi
   return response.data
 }
 
+// Manual unarchiving only - the user selects specific rows on the Archive page and presses an
+// Unarchive button. Moves the entries back out of the archive tables into the live
+// journal_entries/journals tables, the reverse of archiveJournals above.
+export async function unarchiveJournals(transactionIds: string[]): Promise<{ unarchived: number; skipped: string[] }> {
+  const response = await api.post<{ unarchived: number; skipped: string[] }>('/archive/unarchive', { transactionIds })
+  return response.data
+}
+
 export async function getTransactionById(transactionId: string): Promise<Transaction> {
   const response = await api.get<BackendTransaction>(`/transactions/${encodeURIComponent(transactionId)}`)
   return normalizeTransaction(response.data)
