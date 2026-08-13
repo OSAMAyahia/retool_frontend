@@ -242,6 +242,8 @@ export function TransactionDetailPanel({
             <Field label="Retry Count" value={transaction.retryCount} />
             <Field label="Odoo Reference ID" value={transaction.odooReferenceId} />
             <Field label="Value Date" value={formatDateOnly(transaction.valueDate)} />
+            <Field label="Uploaded Date (Receiving Date)" value={formatDateTime(transaction.uploadedAt ?? null)} />
+            <Field label="Processing Date" value={formatDateTime(transaction.processedAt ?? null)} />
             <Field label="Created At" value={formatDateTime(transaction.createdAt)} />
             <Field label="Updated At" value={formatDateTime(transaction.updatedAt)} />
           </dl>

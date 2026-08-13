@@ -17,6 +17,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { ExcelImportModal } from '../components/ExcelImportModal'
 import { FilterBar } from '../components/FilterBar'
+import { ImportResultDetails } from '../components/ImportResultDetails'
 import { NotMappedAccountsModal } from '../components/NotMappedAccountsModal'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards } from '../components/SummaryCards'
@@ -45,6 +46,7 @@ import {
   transactionJournalId,
 } from '../utils/tableFields'
 import type {
+  IngestSummaryResponse,
   Journal,
   PageResponse,
   Transaction,
@@ -165,6 +167,9 @@ export function Dashboard() {
   const [isLoadingGroupMembers, setIsLoadingGroupMembers] = useState(false)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
+  const [sortBy, setSortBy] = useState<string | undefined>(undefined)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc' | undefined>(undefined)
+  const [filterResetSignal, setFilterResetSignal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -175,6 +180,7 @@ export function Dashboard() {
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [lastImportSummary, setLastImportSummary] = useState<IngestSummaryResponse | null>(null)
   const [importRows, setImportRows] = useState<IngestTransactionPayload[]>([])
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
@@ -232,7 +238,7 @@ export function Dashboard() {
       }
 
       try {
-        const response = await getTransactionGroups(overrideFilters ?? filters, overridePage ?? page, size)
+        const response = await getTransactionGroups(overrideFilters ?? filters, overridePage ?? page, size, sortBy, sortDir)
         setGroupsPage(response)
       } catch {
         setGroupsPage(initialGroupsPage)
@@ -240,7 +246,7 @@ export function Dashboard() {
         setIsGroupsLoading(false)
       }
     },
-    [filters, page, size],
+    [filters, page, size, sortBy, sortDir],
   )
 
   const loadJournalCount = useCallback(async () => {
@@ -334,6 +340,21 @@ export function Dashboard() {
 
   const handleResetFilters = () => {
     setFilters({})
+    setPage(0)
+    setSortBy(undefined)
+    setSortDir(undefined)
+    setFilterResetSignal((current) => current + 1)
+  }
+
+  const handleSort = (field: string) => {
+    setSortBy((currentField) => {
+      if (currentField !== field) {
+        setSortDir('asc')
+        return field
+      }
+      setSortDir((currentDir) => (currentDir === 'asc' ? 'desc' : 'asc'))
+      return field
+    })
     setPage(0)
   }
 
@@ -511,6 +532,7 @@ export function Dashboard() {
         setActionMessage(
           `Large-file import completed. Imported ${result.received} rows, skipped ${result.duplicates} duplicates, and rejected ${result.failed}.`,
         )
+        setLastImportSummary(result)
         if (result.failed > 0) {
           setActionError(`Some rows were rejected. Open the row details or retry after correcting the source file.`)
         }
@@ -555,6 +577,7 @@ export function Dashboard() {
         })
       })
       setUploadProgress(null)
+      setLastImportSummary(result)
       const nextFilters: TransactionFilters = {}
       setFilters(nextFilters)
       setPage(0)
@@ -769,6 +792,7 @@ export function Dashboard() {
             {actionError}
           </div>
         ) : null}
+        {lastImportSummary ? <ImportResultDetails summary={lastImportSummary} /> : null}
 
         <div className="mt-6">
           <FilterBar
@@ -777,6 +801,8 @@ export function Dashboard() {
             sources={sources}
             autoRefresh={autoRefresh}
             isLoading={isLoading}
+            storageKey="dashboardFilterFields"
+            resetSignal={filterResetSignal}
             onFiltersChange={handleFiltersChange}
             onRefresh={() => {
               void loadTransactions()
@@ -878,6 +904,9 @@ export function Dashboard() {
             isLoading={isGroupsLoading}
             onSelectGroup={(group) => void handleSelectGroup(group)}
             activeReason={filters.internalStatus === 'un-completed' ? filters.rejectionReason : undefined}
+            sortBy={sortBy}
+            sortDir={sortDir}
+            onSort={handleSort}
           />
 
           <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">

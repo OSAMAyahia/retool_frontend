@@ -1,6 +1,7 @@
-import { AlertTriangle, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, ExternalLink, ListChecks, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import type { Journal } from '../types/transaction'
+import { getJournalTransactions } from '../services/api'
+import type { Journal, Transaction } from '../types/transaction'
 import { StatusBadge } from './StatusBadge'
 
 interface JournalDetailPanelProps {
@@ -73,11 +74,33 @@ function formatMoney(value: number | null) {
 
 export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps) {
   const [rawOpen, setRawOpen] = useState(false)
+  const [transactionsOpen, setTransactionsOpen] = useState(false)
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+  const [relatedTransactions, setRelatedTransactions] = useState<Transaction[]>([])
+  const [transactionsError, setTransactionsError] = useState<string | null>(null)
 
   const rawJson = useMemo(
     () => JSON.stringify(journal?.lines.map((line) => line.rawPayload ?? line) ?? [], null, 2),
     [journal],
   )
+
+  const handleViewTransactions = async () => {
+    if (!journal) {
+      return
+    }
+    setTransactionsOpen(true)
+    setIsLoadingTransactions(true)
+    setTransactionsError(null)
+    try {
+      const transactions = await getJournalTransactions(journal.transactionId)
+      setRelatedTransactions(transactions)
+    } catch (error) {
+      setRelatedTransactions([])
+      setTransactionsError(error instanceof Error ? error.message : 'Unable to load related transactions.')
+    } finally {
+      setIsLoadingTransactions(false)
+    }
+  }
 
   if (!journal) {
     return null
@@ -97,14 +120,34 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                 {journal.lineCount} journal lines · Debit {formatMoney(journal.totalDebit)} · Credit {formatMoney(journal.totalCredit)}
               </p>
             </div>
-            <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-              type="button"
-              onClick={onClose}
-              aria-label="Close journal detail panel"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                type="button"
+                onClick={() => void handleViewTransactions()}
+              >
+                <ListChecks className="h-4 w-4" aria-hidden="true" />
+                View Transactions
+              </button>
+              {journal.odooEntryUrl ? (
+                <button
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  type="button"
+                  onClick={() => window.open(journal.odooEntryUrl ?? '', '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  Open Odoo Entry
+                </button>
+              ) : null}
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                type="button"
+                onClick={onClose}
+                aria-label="Close journal detail panel"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -174,6 +217,48 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               </table>
             </div>
           </section>
+
+          {transactionsOpen ? (
+            <section className="mt-5 overflow-hidden rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Related transactions ({relatedTransactions.length})
+                </h3>
+                <button
+                  type="button"
+                  className="text-xs font-bold text-slate-500 hover:text-slate-900"
+                  onClick={() => setTransactionsOpen(false)}
+                >
+                  Hide
+                </button>
+              </div>
+              {isLoadingTransactions ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500">Loading transactions…</p>
+              ) : transactionsError ? (
+                <p className="px-4 py-6 text-center text-sm text-rose-600">{transactionsError}</p>
+              ) : relatedTransactions.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500">No transactions found for this journal entry.</p>
+              ) : (
+                <ul className="divide-y divide-slate-200">
+                  {relatedTransactions.map((transaction) => (
+                    <li key={transaction.transactionId} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <span className="min-w-0">
+                        <span className="block truncate font-mono text-sm font-semibold text-slate-900">
+                          {transaction.transactionId}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          {transaction.accountId} · {transaction.internalStatus}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-sm font-bold text-slate-900">
+                        {formatMoney(transaction.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : null}
 
           <section className="mt-4 rounded-lg border border-slate-200">
             <button

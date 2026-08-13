@@ -20,6 +20,7 @@ export const journalColumnLabels = [
   'lines',
   'created_at',
   'status',
+  'odoo reference',
 ] as const
 
 function rawObject(value: unknown): Record<string, unknown> {

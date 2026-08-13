@@ -3,8 +3,10 @@ import type {
   IngestSummaryResponse,
   IngestTransactionPayload,
   Journal,
+  JournalGroupNode,
   PageResponse,
   ProcessingResponse,
+  SortDirection,
   Transaction,
   TransactionFilters,
   TransactionStatus,
@@ -170,6 +172,8 @@ function normalizeTransaction(transaction: BackendTransaction): Transaction {
     crDr: transaction.crDr ?? transaction.cr_dr ?? transaction.type,
     valueDate: transaction.valueDate ?? transaction.value_date ?? null,
     createdAt: transaction.createdAt ?? transaction.created_at ?? '',
+    uploadedAt: transaction.uploadedAt ?? null,
+    processedAt: transaction.processedAt ?? null,
     source: transaction.source ?? 'Excel',
     internalStatus: normalizeStatus(transaction.internalStatus),
   }
@@ -213,6 +217,7 @@ function normalizeJournal(journal: BackendJournal): Journal {
     errorMessage: journal.errorMessage ?? null,
     lines: journal.lines ?? [],
     createdAt: journal.createdAt ?? journal.created_at ?? '',
+    odooEntryUrl: journal.odooEntryUrl ?? null,
   }
 }
 
@@ -244,6 +249,8 @@ export async function getTransactions(
   filters: TransactionFilters,
   page: number,
   size: number,
+  sortBy?: string,
+  sortDir?: SortDirection,
 ): Promise<PageResponse<Transaction>> {
   const response = await api.get<BackendPage<BackendTransaction> | BackendTransaction[]>('/transactions', {
     params: {
@@ -252,9 +259,13 @@ export async function getTransactions(
       internalStatus: filters.internalStatus || undefined,
       source: filters.source || undefined,
       accountId: filters.accountId || undefined,
+      journalId: filters.journalId || undefined,
+      transactionId: filters.transactionId || undefined,
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
       notCompletedReason: filters.rejectionReason || undefined,
+      sortBy: sortBy || undefined,
+      sortDir: sortDir || undefined,
     },
   })
 
@@ -277,6 +288,8 @@ export async function getTransactionGroups(
   filters: TransactionFilters,
   page: number,
   size: number,
+  sortBy?: string,
+  sortDir?: SortDirection,
 ): Promise<PageResponse<TransactionGroupSummary>> {
   const response = await api.get<BackendPage<TransactionGroupSummary>>('/transactions/grouped', {
     params: {
@@ -288,6 +301,8 @@ export async function getTransactionGroups(
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
       notCompletedReason: filters.rejectionReason || undefined,
+      sortBy: sortBy || undefined,
+      sortDir: sortDir || undefined,
     },
   })
 
@@ -310,6 +325,8 @@ function createEmptyIngestSummary(): IngestSummaryResponse {
     failed: 0,
     processedAt: new Date().toISOString(),
     items: [],
+    errorDetails: [],
+    duplicateDetails: [],
   }
 }
 
@@ -322,6 +339,8 @@ function mergeIngestSummary(
   target.failed += source.failed ?? 0
   target.processedAt = source.processedAt ?? target.processedAt
   target.items.push(...(source.items ?? []))
+  target.errorDetails = [...(target.errorDetails ?? []), ...(source.errorDetails ?? [])]
+  target.duplicateDetails = [...(target.duplicateDetails ?? []), ...(source.duplicateDetails ?? [])]
   return target
 }
 
@@ -545,6 +564,8 @@ export async function getJournals(
   filters: TransactionFilters,
   page: number,
   size: number,
+  sortBy?: string,
+  sortDir?: SortDirection,
 ): Promise<PageResponse<Journal>> {
   const response = await api.get<BackendPage<BackendJournal> | BackendJournal[]>('/journals', {
     params: {
@@ -552,10 +573,14 @@ export async function getJournals(
       size,
       status: filters.internalStatus || undefined,
       journal: filters.source || undefined,
+      journalId: filters.journalId || undefined,
       account: filters.accountId || undefined,
+      transactionId: filters.transactionId || undefined,
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
       rejectionReason: filters.rejectionReason || undefined,
+      sortBy: sortBy || undefined,
+      sortDir: sortDir || undefined,
     },
   })
 
@@ -565,6 +590,85 @@ export async function getJournals(
 export async function getJournalById(transactionId: string): Promise<Journal> {
   const response = await api.get<BackendJournal>(`/journals/${encodeURIComponent(transactionId)}`)
   return normalizeJournal(response.data)
+}
+
+// Same filters as getJournals above, reshaped server-side into a txn_id -> journal ->
+// account_number tree with per-account SUM(debit)/SUM(credit) - backs the Journal page's Tree
+// View toggle (see JournalTreeView.tsx). Sorting isn't supported on this endpoint.
+export async function getJournalsGrouped(
+  filters: TransactionFilters,
+  page: number,
+  size: number,
+): Promise<PageResponse<JournalGroupNode>> {
+  const response = await api.get<BackendPage<JournalGroupNode> | JournalGroupNode[]>('/journals/grouped', {
+    params: {
+      page,
+      size,
+      status: filters.internalStatus || undefined,
+      journal: filters.source || undefined,
+      journalId: filters.journalId || undefined,
+      account: filters.accountId || undefined,
+      transactionId: filters.transactionId || undefined,
+      dateFrom: toDateTimeFrom(filters.dateFrom),
+      dateTo: toDateTimeTo(filters.dateTo),
+      rejectionReason: filters.rejectionReason || undefined,
+    },
+  })
+
+  const data = response.data
+  if (Array.isArray(data)) {
+    return {
+      content: data,
+      page: 0,
+      size: data.length,
+      totalElements: data.length,
+      totalPages: data.length > 0 ? 1 : 0,
+    }
+  }
+
+  const content = data.content ?? []
+  return {
+    content,
+    page: data.page ?? data.number ?? 0,
+    size: data.size ?? content.length,
+    totalElements: data.totalElements ?? content.length,
+    totalPages: data.totalPages ?? (content.length > 0 ? 1 : 0),
+  }
+}
+
+// Traceability: every transaction leg tied to this journal entry's txn_id, regardless of
+// internal_status - backs the "View Transactions" action in JournalDetailPanel.
+export async function getJournalTransactions(transactionId: string): Promise<Transaction[]> {
+  const response = await api.get<BackendTransaction[]>(
+    `/journals/${encodeURIComponent(transactionId)}/transactions`,
+  )
+  return (response.data ?? []).map(normalizeTransaction)
+}
+
+// B8: deletes the journal entry (and its lines) for this txn_id. Throws a friendly, user-facing
+// error when the backend 409s because the entry was already sent to Odoo.
+export async function deleteJournal(transactionId: string): Promise<void> {
+  try {
+    await api.delete(`/journals/${encodeURIComponent(transactionId)}`)
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 409) {
+      throw new Error('This journal entry has already been sent to Odoo and cannot be deleted.')
+    }
+    throw error
+  }
+}
+
+// B8: deletes a single raw transaction row. Throws a friendly, user-facing error when the
+// backend 409s because it's already part of a journal entry sent to Odoo.
+export async function deleteTransaction(transactionId: string): Promise<void> {
+  try {
+    await api.delete(`/transactions/${encodeURIComponent(transactionId)}`)
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 409) {
+      throw new Error('This transaction is already part of a journal entry sent to Odoo and cannot be deleted.')
+    }
+    throw error
+  }
 }
 
 // Backed by the dedicated archive tables (see JournalStatusService.markSent), not a status=SENT

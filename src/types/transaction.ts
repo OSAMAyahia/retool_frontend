@@ -20,6 +20,10 @@ export interface Transaction {
   odooReferenceId: string | null
   createdAt: string
   updatedAt: string
+  // When this row was received by ingest/import - see TransactionResponse.uploadedAt on the backend.
+  uploadedAt?: string | null
+  // When this row was actually processed into a journal entry - see TransactionResponse.processedAt.
+  processedAt?: string | null
   rawPayload?: unknown
 }
 
@@ -50,7 +54,26 @@ export interface Journal {
   odooReferenceId: string | null
   createdAt: string
   updatedAt: string
+  // Best-effort deep link into the Odoo web UI for this entry - only populated once
+  // odooReferenceId is set (i.e. the entry has actually been sent to Odoo).
+  odooEntryUrl?: string | null
   lines: JournalLine[]
+}
+
+// One node of the txn_id -> journal -> account_number tree backing GET /api/v1/journals/grouped.
+// Each account-level summary retains its originating txnId/journal (not just the totals).
+export interface JournalGroupAccountSummary {
+  account: string | null
+  totalDebit: number
+  totalCredit: number
+  txnId: string
+  journal: string | null
+}
+
+export interface JournalGroupNode {
+  txnId: string
+  journal: string | null
+  accounts: JournalGroupAccountSummary[]
 }
 
 
@@ -86,12 +109,32 @@ export interface ProcessingResponse {
   processedAt: string
 }
 
+// Structured detail for a single rejected import row, alongside the flat `errors: string[]` kept
+// on each ingest item for backward compatibility. `field` is best-effort: null when the failure
+// isn't attributable to one specific field.
+export interface ImportRowError {
+  rowNumber: number
+  txnId: string | null
+  field: string | null
+  reason: string
+}
+
+// Identifies one row that was skipped during ingest/import because it was a true full-row
+// duplicate of an already-accepted row.
+export interface DuplicateRowInfo {
+  rowNumber: number
+  txnId: string | null
+}
+
 export interface IngestSummaryResponse {
   received: number
   duplicates: number
   failed: number
   processedAt: string
   items: unknown[]
+  // May be empty/undefined on older backend responses - always guard before rendering.
+  errorDetails?: ImportRowError[]
+  duplicateDetails?: DuplicateRowInfo[]
 }
 
 export interface PageResponse<T> {
@@ -110,7 +153,17 @@ export interface TransactionFilters {
   dateTo?: string
   // Journal-only: narrows REJECTED entries down to a specific cause ("NOT_MAPPED" | "NOT_BALANCED").
   rejectionReason?: string
+  // Free-text/partial, case-insensitive match against the journal column (Journal page) or the
+  // raw_payload journal_id/Journal field (Dashboard) - kept separate from the exact-match
+  // `source` field above for backward compatibility with the existing dropdown filter.
+  journalId?: string
+  // Free-text/partial, case-insensitive match against transaction_id / journal_entries.txn_id.
+  transactionId?: string
 }
+
+// Whitelisted sort fields the backend accepts - see JournalService.resolveJournalSort and
+// TransactionService.resolveTransactionSort. Anything else silently falls back to the default.
+export type SortDirection = 'asc' | 'desc'
 
 export interface TransactionSummary {
   total: number

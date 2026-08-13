@@ -1,4 +1,6 @@
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import type { TransactionGroupSummary } from '../services/api'
+import type { SortDirection } from '../types/transaction'
 import { dashboardColumnLabels, displayDate } from '../utils/tableFields'
 
 interface TransactionTableProps {
@@ -9,6 +11,16 @@ interface TransactionTableProps {
   // already matches that reason (it's the query's WHERE clause) - shown as a small tag next to
   // each row so it's clear why these rows never became a Journal Table entry.
   activeReason?: string
+  sortBy?: string
+  sortDir?: SortDirection
+  onSort?: (field: string) => void
+}
+
+// Whitelisted on the backend for GET /transactions/grouped (see
+// TransactionService.findTransactionGroups) - anything else falls back to the valueDate default.
+const SORTABLE_FIELDS: Partial<Record<(typeof dashboardColumnLabels)[number], string>> = {
+  'transaction date': 'valueDate',
+  account_number: 'accountId',
 }
 
 function reasonTagLabel(reason?: string) {
@@ -57,7 +69,15 @@ function LoadingRows() {
   )
 }
 
-export function TransactionTable({ groups, isLoading, onSelectGroup, activeReason }: TransactionTableProps) {
+export function TransactionTable({
+  groups,
+  isLoading,
+  onSelectGroup,
+  activeReason,
+  sortBy,
+  sortDir,
+  onSort,
+}: TransactionTableProps) {
   const reasonLabel = reasonTagLabel(activeReason)
   return (
     <div className="max-h-[680px] overflow-y-auto overflow-x-hidden bg-white">
@@ -74,14 +94,30 @@ export function TransactionTable({ groups, isLoading, onSelectGroup, activeReaso
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
-            {columns.map((column, index) => (
-              <th
-                key={`${column}-${index}`}
-                className={`h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em] text-left`}
-              >
-                {column}
-              </th>
-            ))}
+            {columns.map((column, index) => {
+              const sortField = SORTABLE_FIELDS[column]
+              const isActive = sortField != null && sortBy === sortField
+              return (
+                <th
+                  key={`${column}-${index}`}
+                  className={`h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em] text-left ${
+                    sortField && onSort ? 'cursor-pointer select-none hover:text-[#33406f]' : ''
+                  }`}
+                  onClick={sortField && onSort ? () => onSort(sortField) : undefined}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {column}
+                    {sortField ? (
+                      isActive && sortDir === 'desc' ? (
+                        <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : isActive ? (
+                        <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : null
+                    ) : null}
+                  </span>
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>

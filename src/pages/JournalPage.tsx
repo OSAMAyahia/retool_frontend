@@ -5,11 +5,14 @@ import {
   ChevronRight,
   Download,
   FileSpreadsheet,
+  ListTree,
   LogOut,
   RefreshCw,
   RotateCw,
   Send,
   ShieldCheck,
+  Table2,
+  Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -17,11 +20,19 @@ import { useAuth } from '../auth/useAuth'
 import { FilterBar } from '../components/FilterBar'
 import { JournalDetailPanel } from '../components/JournalDetailPanel'
 import { JournalTable } from '../components/JournalTable'
+import { JournalTreeView } from '../components/JournalTreeView'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
 import { Toast, type ToastMessage } from '../components/Toast'
-import { archiveJournals, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
-import type { Journal, PageResponse, TransactionFilters, TransactionStatus, TransactionSummary } from '../types/transaction'
+import { archiveJournals, deleteJournal, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
+import type {
+  Journal,
+  PageResponse,
+  SortDirection,
+  TransactionFilters,
+  TransactionStatus,
+  TransactionSummary,
+} from '../types/transaction'
 import { displayDate, journalColumnLabels } from '../utils/tableFields'
 
 const initialJournalsPage: PageResponse<Journal> = {
@@ -165,6 +176,11 @@ export function JournalPage() {
   const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0 })
   const [sendProgress, setSendProgress] = useState<{ label: string; subLabel: string } | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [sortBy, setSortBy] = useState<string | undefined>(undefined)
+  const [sortDir, setSortDir] = useState<SortDirection | undefined>(undefined)
+  const [filterResetSignal, setFilterResetSignal] = useState(0)
+  const [viewMode, setViewMode] = useState<'table' | 'tree'>('table')
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const summary = useMemo(
     () => buildJournalSummary(statusCounts.total, statusCounts.sent),
@@ -187,6 +203,15 @@ export function JournalPage() {
     () =>
       journalsPage.content
         .filter((journal) => selectedIds.has(journal.transactionId) && journal.status === 'SENT')
+        .map((journal) => journal.transactionId),
+    [journalsPage.content, selectedIds],
+  )
+  // Deletion is blocked (409) once an entry is SENT to Odoo - only offer bulk-delete on the rest
+  // of the selection, same filtering pattern as selectedSentIds above.
+  const selectedDeletableIds = useMemo(
+    () =>
+      journalsPage.content
+        .filter((journal) => selectedIds.has(journal.transactionId) && journal.status !== 'SENT')
         .map((journal) => journal.transactionId),
     [journalsPage.content, selectedIds],
   )
@@ -232,7 +257,7 @@ export function JournalPage() {
         // A SENT entry stays visible here (in place) until the user manually archives it, so no
         // default status filter is applied - a blank filter shows every entry regardless of
         // status, same as before archiving existed.
-        const response = await getJournals(filters, page, 50)
+        const response = await getJournals(filters, page, 50, sortBy, sortDir)
         setJournalsPage(response)
         setActionError(null)
       } catch (error) {
@@ -243,7 +268,7 @@ export function JournalPage() {
         setLastUpdated(new Date())
       }
     },
-    [filters, page],
+    [filters, page, sortBy, sortDir],
   )
 
   // Independent of `filters`/`page` on purpose - the summary cards should always show the true
@@ -283,6 +308,21 @@ export function JournalPage() {
 
   const handleResetFilters = () => {
     setFilters({})
+    setPage(0)
+    setSortBy(undefined)
+    setSortDir(undefined)
+    setFilterResetSignal((current) => current + 1)
+  }
+
+  const handleSort = (field: string) => {
+    setSortBy((currentField) => {
+      if (currentField !== field) {
+        setSortDir('asc')
+        return field
+      }
+      setSortDir((currentDir) => (currentDir === 'asc' ? 'desc' : 'asc'))
+      return field
+    })
     setPage(0)
   }
 
@@ -436,6 +476,78 @@ export function JournalPage() {
     }
   }
 
+  const handleDeleteJournal = async (journal: Journal) => {
+    if (journal.status === 'SENT') {
+      setToast({ tone: 'error', text: 'This journal entry has already been sent to Odoo and cannot be deleted.' })
+      return
+    }
+    if (!window.confirm(`Delete journal entry ${journal.transactionId}? This cannot be undone.`)) {
+      return
+    }
+    setIsDeleting(true)
+    try {
+      await deleteJournal(journal.transactionId)
+      setToast({ tone: 'success', text: `Deleted journal entry ${journal.transactionId}.` })
+      setSelectedIds((current) => {
+        const next = new Set(current)
+        next.delete(journal.transactionId)
+        return next
+      })
+      await loadJournals(false)
+      await loadStatusCounts()
+    } catch (error) {
+      setToast({ tone: 'error', text: getApiErrorMessage(error) })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) {
+      return
+    }
+    if (selectedDeletableIds.length === 0) {
+      setToast({
+        tone: 'error',
+        text: 'None of the selected rows can be deleted - Sent journal entries cannot be deleted.',
+      })
+      return
+    }
+    if (
+      !window.confirm(
+        `Delete ${selectedDeletableIds.length} selected journal ${selectedDeletableIds.length === 1 ? 'entry' : 'entries'}? This cannot be undone.`,
+      )
+    ) {
+      return
+    }
+    setIsDeleting(true)
+    const failures: string[] = []
+    try {
+      for (const transactionId of selectedDeletableIds) {
+        try {
+          await deleteJournal(transactionId)
+        } catch (error) {
+          failures.push(`${transactionId}: ${getApiErrorMessage(error)}`)
+        }
+      }
+      const succeeded = selectedDeletableIds.length - failures.length
+      if (succeeded > 0) {
+        setToast({ tone: 'success', text: `Deleted ${succeeded} journal entries.` })
+      }
+      if (failures.length > 0) {
+        setToast({
+          tone: 'error',
+          text: `${failures.length} of the selected rows could not be deleted (already sent to Odoo).`,
+        })
+      }
+      setSelectedIds(new Set())
+      await loadJournals(false)
+      await loadStatusCounts()
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
@@ -545,6 +657,42 @@ export function JournalPage() {
               {selectedSentIds.length > 0 ? `Archive Selected (${selectedSentIds.length})` : 'Archive Selected'}
             </button>
             <button
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#ffb8c2] bg-[#fff1f2] px-4 text-xs font-extrabold text-[#dc2626] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              onClick={() => void handleDeleteSelected()}
+              disabled={isDeleting || selectedIds.size === 0}
+              title={
+                selectedDeletableIds.length > 0
+                  ? `Delete ${selectedDeletableIds.length} selected journal entries`
+                  : 'Select one or more non-Sent rows to delete them'
+              }
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {selectedDeletableIds.length > 0 ? `Delete Selected (${selectedDeletableIds.length})` : 'Delete Selected'}
+            </button>
+            <div className="inline-flex h-11 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white/80 p-1 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
+              <button
+                className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition ${
+                  viewMode === 'table' ? 'bg-[#5748f5] text-white' : 'text-[#5748f5] hover:bg-[#f7f8ff]'
+                }`}
+                type="button"
+                onClick={() => setViewMode('table')}
+              >
+                <Table2 className="h-4 w-4" aria-hidden="true" />
+                Table View
+              </button>
+              <button
+                className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition ${
+                  viewMode === 'tree' ? 'bg-[#5748f5] text-white' : 'text-[#5748f5] hover:bg-[#f7f8ff]'
+                }`}
+                type="button"
+                onClick={() => setViewMode('tree')}
+              >
+                <ListTree className="h-4 w-4" aria-hidden="true" />
+                Tree View
+              </button>
+            </div>
+            <button
               className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
               type="button"
               onClick={() => {
@@ -605,6 +753,9 @@ export function JournalPage() {
             sourceLabel="Journal"
             accountLabel="Journal Items/Account"
             accountPlaceholder="Search journal account..."
+            journalIdMode
+            storageKey="journalFilterFields"
+            resetSignal={filterResetSignal}
             isLoading={isLoading}
             onFiltersChange={handleFiltersChange}
             onRefresh={() => {
@@ -616,42 +767,52 @@ export function JournalPage() {
         </div>
 
         <div className="mt-6 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          <JournalTable
-            journals={journalsPage.content}
-            isLoading={isLoading}
-            onSelect={handleSelectJournal}
-            selectedIds={selectedIds}
-            onToggleRow={handleToggleRow}
-            onToggleAll={handleToggleAll}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
-            <span>
-              Showing {journalsPage.content.length} of {journalsPage.totalElements} journal entries
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white px-3 font-bold text-[#172452] disabled:opacity-40"
-                type="button"
-                disabled={page === 0 || isLoading}
-                onClick={() => setPage((current) => Math.max(current - 1, 0))}
-              >
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Previous
-              </button>
-              <span className="px-2 font-bold">
-                Page {page + 1} of {Math.max(journalsPage.totalPages, 1)}
-              </span>
-              <button
-                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white px-3 font-bold text-[#172452] disabled:opacity-40"
-                type="button"
-                disabled={page + 1 >= journalsPage.totalPages || isLoading}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          {viewMode === 'table' ? (
+            <>
+              <JournalTable
+                journals={journalsPage.content}
+                isLoading={isLoading}
+                onSelect={handleSelectJournal}
+                selectedIds={selectedIds}
+                onToggleRow={handleToggleRow}
+                onToggleAll={handleToggleAll}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
+                onDeleteJournal={(journal) => void handleDeleteJournal(journal)}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
+                <span>
+                  Showing {journalsPage.content.length} of {journalsPage.totalElements} journal entries
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white px-3 font-bold text-[#172452] disabled:opacity-40"
+                    type="button"
+                    disabled={page === 0 || isLoading}
+                    onClick={() => setPage((current) => Math.max(current - 1, 0))}
+                  >
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    Previous
+                  </button>
+                  <span className="px-2 font-bold">
+                    Page {page + 1} of {Math.max(journalsPage.totalPages, 1)}
+                  </span>
+                  <button
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white px-3 font-bold text-[#172452] disabled:opacity-40"
+                    type="button"
+                    disabled={page + 1 >= journalsPage.totalPages || isLoading}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <JournalTreeView filters={filters} />
+          )}
         </div>
       </section>
       <JournalDetailPanel journal={selectedJournal} onClose={() => setSelectedJournal(null)} />
