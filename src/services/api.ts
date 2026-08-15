@@ -12,8 +12,16 @@ import type {
   TransactionStatus,
 } from '../types/transaction'
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL
+const apiBaseUrl =
+  typeof window !== 'undefined' &&
+  window.location.protocol === 'https:' &&
+  configuredApiBaseUrl?.startsWith('http:')
+    ? '/api/v1'
+    : configuredApiBaseUrl || '/api/v1'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  baseURL: apiBaseUrl,
   timeout: 120000,
 })
 
@@ -834,7 +842,6 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
-
 
 
 
