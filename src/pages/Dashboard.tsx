@@ -23,6 +23,7 @@ import { NotMappedAccountsModal } from '../components/NotMappedAccountsModal'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
+import { TransactionGroupTreePanel } from '../components/TransactionGroupTreePanel'
 import { TransactionTable } from '../components/TransactionTable'
 import {
   deleteTransaction,
@@ -939,60 +940,77 @@ export function Dashboard() {
         </div>
 
         <div className="mt-3 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          <TransactionTable
-            groups={groupsPage.content}
-            isLoading={isGroupsLoading}
-            onSelectGroup={(group) => void handleSelectGroup(group)}
-            activeReason={filters.internalStatus === 'un-completed' ? filters.rejectionReason : undefined}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onSort={handleSort}
-          />
+          {selectedGroup ? (
+            <TransactionGroupTreePanel
+              group={selectedGroup}
+              tree={groupTree}
+              isLoading={isLoadingGroupTree}
+              isDeleting={isDeletingTransaction}
+              onBack={() => {
+                setSelectedGroup(null)
+                setGroupTree([])
+              }}
+              onSelectTransaction={(transaction) => void handleSelectTransaction(transaction)}
+              onDelete={(transaction) => void handleDeleteTransaction(transaction)}
+            />
+          ) : (
+            <>
+              <TransactionTable
+                groups={groupsPage.content}
+                isLoading={isGroupsLoading}
+                onSelectGroup={(group) => void handleSelectGroup(group)}
+                activeReason={filters.internalStatus === 'un-completed' ? filters.rejectionReason : undefined}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
+              />
 
-          <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              Showing {groupsPage.content.length === 0 ? 0 : page * size + 1} to{' '}
-              {Math.min((page + 1) * size, groupsPage.totalElements)} of{' '}
-              {groupsPage.totalElements} grouped rows
-            </div>
-            <div className="flex items-center gap-3">
-              <select
-                className="h-11 rounded-xl border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452] outline-none focus:border-[#5748f5] focus:ring-2 focus:ring-[#5748f5]/15"
-                value={size}
-                onChange={(event) => {
-                  setSize(Number(event.target.value))
-                  setPage(0)
-                }}
-              >
-                {[10, 25, 50].map((option) => (
-                  <option key={option} value={option}>
-                    {option} / page
-                  </option>
-                ))}
-              </select>
-              <button
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={() => setPage((current) => Math.max(current - 1, 0))}
-                disabled={!canGoBack}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-              </button>
-              <strong className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#7354ff] to-[#563cee] text-white shadow-[0_10px_18px_rgba(88,58,235,0.22)]">
-                {groupsPage.totalPages === 0 ? 0 : page + 1}
-              </strong>
-              <button
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={() => setPage((current) => current + 1)}
-                disabled={!canGoForward}
-                aria-label="Next page"
-              >
-                <ChevronRight className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+              <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  Showing {groupsPage.content.length === 0 ? 0 : page * size + 1} to{' '}
+                  {Math.min((page + 1) * size, groupsPage.totalElements)} of{' '}
+                  {groupsPage.totalElements} grouped rows
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    className="h-11 rounded-xl border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452] outline-none focus:border-[#5748f5] focus:ring-2 focus:ring-[#5748f5]/15"
+                    value={size}
+                    onChange={(event) => {
+                      setSize(Number(event.target.value))
+                      setPage(0)
+                    }}
+                  >
+                    {[10, 25, 50].map((option) => (
+                      <option key={option} value={option}>
+                        {option} / page
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(current - 1, 0))}
+                    disabled={!canGoBack}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <strong className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#7354ff] to-[#563cee] text-white shadow-[0_10px_18px_rgba(88,58,235,0.22)]">
+                    {groupsPage.totalPages === 0 ? 0 : page + 1}
+                  </strong>
+                  <button
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white text-[#5748f5] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    onClick={() => setPage((current) => current + 1)}
+                    disabled={!canGoForward}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -1043,20 +1061,13 @@ export function Dashboard() {
       ) : null}
       <TransactionDetailPanel
         transaction={selectedTransaction}
-        group={selectedGroup}
-        groupTree={groupTree}
-        isLoadingGroupTree={isLoadingGroupTree}
         isRetrying={isRetrying}
         isDeleting={isDeletingTransaction}
         retryMessage={retryMessage}
         retryError={retryError}
-        onClose={() => {
-          setSelectedTransaction(null)
-          setSelectedGroup(null)
-        }}
+        onClose={() => setSelectedTransaction(null)}
         onRetry={handleRetry}
         onDelete={(transaction) => void handleDeleteTransaction(transaction)}
-        onSelectFromGroup={(transaction) => void handleSelectTransaction(transaction)}
       />
       {isNotMappedAccountsOpen ? (
         <NotMappedAccountsModal
