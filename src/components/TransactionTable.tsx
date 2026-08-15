@@ -113,6 +113,10 @@ interface TxnRowState {
   leafTransactions: Transaction[]
   isLoadingLeaves: boolean
   leavesLoaded: boolean
+  // True only when the leaves fetch itself errored (network/5xx) - kept distinct from "loaded,
+  // genuinely empty" so a transient failure shows a "couldn't load, click to retry" message
+  // instead of the misleading "No individual rows found for this account leg."
+  leavesFailed: boolean
 }
 
 function LoadingRows() {
@@ -172,12 +176,15 @@ export function TransactionTable({
   }
 
   const fetchLeaves = async (txnId: string) => {
-    updateRow(txnId, (state) => ({ ...state, isLoadingLeaves: true }))
+    updateRow(txnId, (state) => ({ ...state, isLoadingLeaves: true, leavesFailed: false }))
     try {
       const transactions = await getJournalTransactions(txnId)
-      updateRow(txnId, (state) => ({ ...state, leafTransactions: transactions, isLoadingLeaves: false, leavesLoaded: true }))
+      updateRow(txnId, (state) => ({ ...state, leafTransactions: transactions, isLoadingLeaves: false, leavesLoaded: true, leavesFailed: false }))
     } catch {
-      updateRow(txnId, (state) => ({ ...state, leafTransactions: [], isLoadingLeaves: false, leavesLoaded: true }))
+      // Don't cache this as "loaded, empty" - leavesLoaded stays false so the next toggle (or
+      // the Retry action) tries again, instead of permanently showing a misleading "No
+      // individual rows found" for what was actually just a failed request.
+      updateRow(txnId, (state) => ({ ...state, leafTransactions: [], isLoadingLeaves: false, leavesLoaded: false, leavesFailed: true }))
     }
   }
 
@@ -217,6 +224,7 @@ export function TransactionTable({
         leafTransactions: [],
         isLoadingLeaves: false,
         leavesLoaded: false,
+        leavesFailed: false,
       })
       return next
     })
@@ -547,15 +555,33 @@ export function TransactionTable({
                                                   </td>
                                                 </tr>
                                               )
-                                              : accountTransactions.length === 0
+                                              : rowState.leavesFailed
                                                 ? (
                                                   <tr className="border-b border-[#edf1f8]">
-                                                    <td className="px-3 py-3 pl-20 text-xs font-semibold text-[#8290b4]" colSpan={columns.length}>
-                                                      No individual rows found for this account leg.
+                                                    <td className="px-3 py-3 pl-20 text-xs font-semibold text-[#dc2626]" colSpan={columns.length}>
+                                                      Couldn't load these rows.{' '}
+                                                      <button
+                                                        type="button"
+                                                        className="font-bold underline underline-offset-2"
+                                                        onClick={(event) => {
+                                                          event.stopPropagation()
+                                                          void fetchLeaves(group.txnId)
+                                                        }}
+                                                      >
+                                                        Retry
+                                                      </button>
                                                     </td>
                                                   </tr>
                                                 )
-                                                : accountTransactions.map((item) => (
+                                                : accountTransactions.length === 0
+                                                  ? (
+                                                    <tr className="border-b border-[#edf1f8]">
+                                                      <td className="px-3 py-3 pl-20 text-xs font-semibold text-[#8290b4]" colSpan={columns.length}>
+                                                        No individual rows found for this account leg.
+                                                      </td>
+                                                    </tr>
+                                                  )
+                                                  : accountTransactions.map((item) => (
                                                     <tr
                                                       key={item.transactionId}
                                                       className="cursor-pointer border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]"

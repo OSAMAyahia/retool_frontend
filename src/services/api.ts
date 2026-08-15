@@ -313,6 +313,8 @@ export async function getTransactionGroups(
       internalStatus: filters.internalStatus || undefined,
       source: filters.source || undefined,
       accountId: filters.accountId || undefined,
+      transactionId: filters.transactionId || undefined,
+      journalId: filters.journalId || undefined,
       dateFrom: toDateTimeFrom(filters.dateFrom),
       dateTo: toDateTimeTo(filters.dateTo),
       notCompletedReason: filters.rejectionReason || undefined,
