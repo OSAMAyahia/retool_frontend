@@ -48,6 +48,20 @@ export function transactionJournalId(transaction: Transaction) {
   return transaction.journalId ?? textFromRaw(transaction.rawPayload, ['journal_id', 'Journal', 'journal']) ?? ''
 }
 
+// The clean, human-entered business txn_id - not transaction.transactionId, which is the
+// internally generated storage key (e.g. a stableTransactionId hash like
+// "txn100-nz-100-9900000011--50-2026-08-08T00-00-00.000Z" for file-imported legs) and is only
+// meant to uniquely identify one raw row, not to be shown to a user as "the" txn_id. Mirrors the
+// backend's own effective-txn-id resolution order (coalesce over raw_payload's txn_id/Reference/
+// reference/transactionId, see TransactionRepository) so the same row always reads the same
+// txn_id everywhere in the UI.
+export function transactionTxnId(transaction: Transaction) {
+  return (
+    textFromRaw(transaction.rawPayload, ['txn_id', 'Reference', 'reference', 'transactionId']) ??
+    transaction.transactionId
+  )
+}
+
 export function transactionDate(transaction: Transaction) {
   return transaction.date ?? transaction.valueDate ?? textFromRaw(transaction.rawPayload, ['date', 'Date']) ?? ''
 }

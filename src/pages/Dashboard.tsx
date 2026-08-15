@@ -23,7 +23,6 @@ import { NotMappedAccountsModal } from '../components/NotMappedAccountsModal'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
-import { TransactionGroupTreePanel } from '../components/TransactionGroupTreePanel'
 import { TransactionTable } from '../components/TransactionTable'
 import {
   deleteTransaction,
@@ -32,14 +31,12 @@ import {
   getSources,
   getTransactionById,
   getTransactionGroups,
-  getTransactionGroupTree,
   getTransactions,
   importTransactionsFile,
   ingestTransactions,
   processJournals,
   retryTransaction,
   type TransactionGroupSummary,
-  type TransactionGroupTreeNode,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import { parseExcelToTransactions } from '../utils/xlsxImport'
@@ -177,9 +174,10 @@ export function Dashboard() {
   const [journalRows, setJournalRows] = useState(0)
   const [sources, setSources] = useState<string[]>(fallbackSources)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<TransactionGroupSummary | null>(null)
-  const [groupTree, setGroupTree] = useState<TransactionGroupTreeNode[]>([])
-  const [isLoadingGroupTree, setIsLoadingGroupTree] = useState(false)
+  // Bumped after any delete so the always-inline tree (which owns its own per-row expand/fetch
+  // state) knows to refetch data for whichever txn_id rows the user currently has expanded,
+  // without the Dashboard needing to track that expand state itself.
+  const [treeRefreshSignal, setTreeRefreshSignal] = useState(0)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
   const [sortBy, setSortBy] = useState<string | undefined>(undefined)
@@ -445,7 +443,6 @@ export function Dashboard() {
   }
 
   const handleSelectTransaction = async (transaction: Transaction) => {
-    setSelectedGroup(null)
     setSelectedTransaction(transaction)
     setRetryMessage(null)
     setRetryError(null)
@@ -455,22 +452,6 @@ export function Dashboard() {
       setSelectedTransaction(latest)
     } catch {
       setSelectedTransaction(transaction)
-    }
-  }
-
-  const handleSelectGroup = async (group: TransactionGroupSummary) => {
-    setSelectedTransaction(null)
-    setSelectedGroup(group)
-    setGroupTree([])
-    setIsLoadingGroupTree(true)
-
-    try {
-      const tree = await getTransactionGroupTree(filters, group.txnId)
-      setGroupTree(tree)
-    } catch {
-      setGroupTree([])
-    } finally {
-      setIsLoadingGroupTree(false)
     }
   }
 
@@ -510,13 +491,7 @@ export function Dashboard() {
       if (selectedTransaction?.transactionId === transaction.transactionId) {
         setSelectedTransaction(null)
       }
-      if (selectedGroup) {
-        try {
-          setGroupTree(await getTransactionGroupTree(filters, selectedGroup.txnId))
-        } catch {
-          // Keep whatever tree was already shown rather than clearing it on a refresh failure.
-        }
-      }
+      setTreeRefreshSignal((current) => current + 1)
       await loadTransactions(false)
       await loadTransactionGroups(false)
       await loadTransactionStatusCounts()
@@ -525,6 +500,45 @@ export function Dashboard() {
     } finally {
       setIsDeletingTransaction(false)
     }
+  }
+
+  // Bulk variant for the tree view's multi-select - a single confirm covering the whole
+  // selection (rather than one confirm per row, which handleDeleteTransaction's single-item
+  // flow would produce if just called N times) and best-effort per-row deletion so one row
+  // already sent to Odoo (409) doesn't block the rest of the batch from being deleted.
+  const handleBulkDeleteTransactions = async (transactionIds: string[]) => {
+    if (transactionIds.length === 0) {
+      return
+    }
+    if (!window.confirm(`Delete ${transactionIds.length} selected transaction(s)? This cannot be undone.`)) {
+      return
+    }
+    setIsDeletingTransaction(true)
+    setRetryMessage(null)
+    setRetryError(null)
+    const failures: string[] = []
+    for (const transactionId of transactionIds) {
+      try {
+        await deleteTransaction(transactionId)
+      } catch (deleteError) {
+        failures.push(`${transactionId}: ${getApiErrorMessage(deleteError)}`)
+      }
+    }
+    const deletedCount = transactionIds.length - failures.length
+    if (deletedCount > 0) {
+      setRetryMessage(`Deleted ${deletedCount} of ${transactionIds.length} selected transaction(s).`)
+    }
+    if (failures.length > 0) {
+      setRetryError(failures.slice(0, 5).join(' | '))
+    }
+    if (selectedTransaction && transactionIds.includes(selectedTransaction.transactionId)) {
+      setSelectedTransaction(null)
+    }
+    setTreeRefreshSignal((current) => current + 1)
+    await loadTransactions(false)
+    await loadTransactionGroups(false)
+    await loadTransactionStatusCounts()
+    setIsDeletingTransaction(false)
   }
 
   const handleImportFile = async (file: File | undefined) => {
@@ -940,29 +954,20 @@ export function Dashboard() {
         </div>
 
         <div className="mt-3 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white/80 shadow-[0_12px_30px_rgba(31,48,96,0.06)]">
-          {selectedGroup ? (
-            <TransactionGroupTreePanel
-              group={selectedGroup}
-              tree={groupTree}
-              isLoading={isLoadingGroupTree}
-              isDeleting={isDeletingTransaction}
-              onBack={() => {
-                setSelectedGroup(null)
-                setGroupTree([])
-              }}
-              onSelectTransaction={(transaction) => void handleSelectTransaction(transaction)}
-              onDelete={(transaction) => void handleDeleteTransaction(transaction)}
-            />
-          ) : (
-            <>
+          <>
               <TransactionTable
                 groups={groupsPage.content}
                 isLoading={isGroupsLoading}
-                onSelectGroup={(group) => void handleSelectGroup(group)}
+                filters={filters}
+                refreshSignal={treeRefreshSignal}
+                isDeleting={isDeletingTransaction}
                 activeReason={filters.internalStatus === 'un-completed' ? filters.rejectionReason : undefined}
                 sortBy={sortBy}
                 sortDir={sortDir}
                 onSort={handleSort}
+                onSelectTransaction={(transaction) => void handleSelectTransaction(transaction)}
+                onDelete={(transaction) => void handleDeleteTransaction(transaction)}
+                onBulkDelete={(transactionIds) => void handleBulkDeleteTransactions(transactionIds)}
               />
 
               <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
@@ -1010,7 +1015,6 @@ export function Dashboard() {
                 </div>
               </div>
             </>
-          )}
         </div>
       </section>
 

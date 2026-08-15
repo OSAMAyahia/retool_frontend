@@ -282,7 +282,6 @@ export async function getTransactions(
 
 export interface TransactionGroupSummary {
   txnId: string
-  journal: string | null
   valueDate: string | null
   // When this group's rows were received by ingest/import (earliest across the group).
   uploadedAt: string | null
