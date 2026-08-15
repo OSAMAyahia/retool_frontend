@@ -11,6 +11,7 @@ import {
   RotateCw,
   ShieldCheck,
   Upload,
+  X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -195,6 +196,7 @@ export function Dashboard() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [lastImportSummary, setLastImportSummary] = useState<IngestSummaryResponse | null>(null)
+  const [isImportSummaryOpen, setIsImportSummaryOpen] = useState(false)
   const [importRows, setImportRows] = useState<IngestTransactionPayload[]>([])
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
@@ -612,6 +614,11 @@ export function Dashboard() {
       setPage(0)
       setIsImportPopupOpen(false)
       setImportRows([])
+      // Only worth its own popup when there's something to call out - a clean "all N rows
+      // imported" already shows via the actionMessage banner below.
+      if ((result.errorDetails?.length ?? 0) > 0 || (result.duplicateDetails?.length ?? 0) > 0) {
+        setIsImportSummaryOpen(true)
+      }
 
       const resultSummary = `Imported ${result.received} new rows. Duplicates ${result.duplicates}. Failed ${result.failed}.`
       const itemMessages = result.items
@@ -821,7 +828,6 @@ export function Dashboard() {
             {actionError}
           </div>
         ) : null}
-        {lastImportSummary ? <ImportResultDetails summary={lastImportSummary} /> : null}
 
         <div className="mt-6">
           <FilterBar
@@ -997,6 +1003,36 @@ export function Dashboard() {
           }}
           onSubmit={() => void handleSubmitImportRows()}
         />
+      ) : null}
+      {isImportSummaryOpen && lastImportSummary ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111b45]/40 p-4 backdrop-blur-sm">
+          <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#dfe6f4] bg-white p-6 shadow-[0_24px_80px_rgba(17,27,69,0.25)]">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-extrabold text-[#111b45]">Import Summary</h2>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#dfe6f4] text-[#172452] transition hover:bg-[#f7f8ff]"
+                onClick={() => setIsImportSummaryOpen(false)}
+                aria-label="Close import summary"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <p className="mt-1 text-sm font-medium text-[#617096]">
+              Imported {lastImportSummary.received} new rows. Duplicates {lastImportSummary.duplicates}. Failed {lastImportSummary.failed}.
+            </p>
+            <ImportResultDetails summary={lastImportSummary} />
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                className="rounded-xl bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-5 py-3 text-sm font-extrabold text-white shadow-[0_14px_24px_rgba(88,58,235,0.25)]"
+                onClick={() => setIsImportSummaryOpen(false)}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
       <TransactionDetailPanel
         transaction={selectedTransaction}
