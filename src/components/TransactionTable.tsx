@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Trash2 } f
 import { Fragment, useEffect, useState } from 'react'
 import { getJournalTransactions, getTransactionGroupTree, type TransactionGroupSummary, type TransactionGroupTreeNode } from '../services/api'
 import type { SortDirection, Transaction, TransactionFilters } from '../types/transaction'
-import { dashboardColumnLabels, displayDate, transactionCrDr, transactionDate, transactionJournalId, transactionTxnId } from '../utils/tableFields'
+import { dashboardColumnLabels, displayDate, sanitizeOdooReference, transactionCrDr, transactionDate, transactionJournalId, transactionTxnId } from '../utils/tableFields'
 
 interface TransactionTableProps {
   groups: TransactionGroupSummary[]
@@ -415,7 +415,7 @@ export function TransactionTable({
                       <td className="px-3 align-middle">
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="min-w-0 truncate font-mono text-xs font-semibold text-[#2d3b68]">
-                            {group.odooReferenceId ?? '-'}
+                            {sanitizeOdooReference(group.odooReferenceId) ?? '-'}
                           </span>
                           {group.odooEntryUrl ? (
                             <button
@@ -623,7 +623,7 @@ export function TransactionTable({
                                                         {formatDateTime(item.processedAt)}
                                                       </td>
                                                       <td className="px-3 align-middle font-mono text-xs font-semibold text-[#2d3b68]">
-                                                        {item.odooReferenceId ?? '-'}
+                                                        {sanitizeOdooReference(item.odooReferenceId) ?? '-'}
                                                       </td>
                                                       <td className="px-3 align-middle">
                                                         {onDelete ? (

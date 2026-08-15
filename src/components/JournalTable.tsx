@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ExternalLink, Trash2 } from 'lucide-react'
 import type { Journal, SortDirection } from '../types/transaction'
-import { displayDate, journalColumnLabels } from '../utils/tableFields'
+import { displayDate, journalColumnLabels, sanitizeOdooReference } from '../utils/tableFields'
 import { StatusBadge } from './StatusBadge'
 
 interface JournalTableProps {
@@ -210,7 +210,7 @@ export function JournalTable({
                 </td>
                 <td className="px-5 align-middle">
                   <span className="block truncate font-mono text-xs font-bold text-[#2d3b68]" title={journal.odooReferenceId ?? undefined}>
-                    {journal.odooReferenceId ?? '-'}
+                    {sanitizeOdooReference(journal.odooReferenceId) ?? '-'}
                   </span>
                 </td>
                 <td className="px-5 align-middle" onClick={(event) => event.stopPropagation()}>

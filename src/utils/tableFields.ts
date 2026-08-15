@@ -44,6 +44,13 @@ export function displayDate(value: string | null | undefined) {
   return value ?? ''
 }
 
+// Odoo's JSON-RPC convention returns the literal `false` for an unset field - the backend now
+// filters that out at the source (see JournalService.extractReference), but this guards any
+// value saved before that fix so it never displays as a reference or builds a broken link.
+export function sanitizeOdooReference(value: string | null | undefined) {
+  return value && value.toLowerCase() !== 'false' ? value : null
+}
+
 export function transactionJournalId(transaction: Transaction) {
   return transaction.journalId ?? textFromRaw(transaction.rawPayload, ['journal_id', 'Journal', 'journal']) ?? ''
 }
