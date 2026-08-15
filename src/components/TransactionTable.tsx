@@ -204,8 +204,33 @@ export function TransactionTable({
                     </span>
                   </td>
                   <td className="px-3 align-middle">
-                    <span className="block truncate font-semibold text-[#2d3b68]">
-                      {displayDate(group.valueDate) || '-'}
+                    <span className="block truncate text-xs font-semibold text-[#2d3b68]">
+                      {formatDateTime(group.uploadedAt)}
+                    </span>
+                  </td>
+                  <td className="px-3 align-middle">
+                    <span className="block truncate text-xs font-semibold text-[#2d3b68]">
+                      {formatDateTime(group.processedAt)}
+                    </span>
+                  </td>
+                  <td className="px-3 align-middle">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate font-mono text-xs font-semibold text-[#2d3b68]">
+                        {group.odooReferenceId ?? '-'}
+                      </span>
+                      {group.odooEntryUrl ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#5748f5] transition hover:bg-[#f1f5fb]"
+                          title="Open this entry in Odoo"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            window.open(group.odooEntryUrl ?? '', '_blank')
+                          }}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      ) : null}
                     </span>
                   </td>
                 </tr>
