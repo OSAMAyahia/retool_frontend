@@ -690,6 +690,11 @@ export function Dashboard() {
     }
   }
 
+  const hasImportErrorDetails = (lastImportSummary?.errorDetails?.length ?? 0) > 0
+  const hasImportDuplicateDetails = (lastImportSummary?.duplicateDetails?.length ?? 0) > 0
+  const importSummaryDialogWidth =
+    hasImportErrorDetails && hasImportDuplicateDetails ? 'max-w-4xl' : 'max-w-2xl'
+
   return (
     <main className="min-h-screen bg-[#f6f8fc] px-4 py-4 text-[#172452] sm:px-6">
       <section className="mx-auto min-h-[calc(100vh-2rem)] w-full max-w-[1840px] rounded-2xl border border-[#dfe6f4] bg-white/80 px-5 py-7 shadow-[0_18px_50px_rgba(35,48,85,0.08)] sm:px-8 lg:px-12">
@@ -1006,7 +1011,9 @@ export function Dashboard() {
       ) : null}
       {isImportSummaryOpen && lastImportSummary ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111b45]/40 p-4 backdrop-blur-sm">
-          <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#dfe6f4] bg-white p-6 shadow-[0_24px_80px_rgba(17,27,69,0.25)]">
+          <div
+            className={`max-h-[85vh] w-full ${importSummaryDialogWidth} overflow-y-auto rounded-2xl border border-[#dfe6f4] bg-white p-6 shadow-[0_24px_80px_rgba(17,27,69,0.25)]`}
+          >
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-extrabold text-[#111b45]">Import Summary</h2>
               <button
@@ -1061,7 +1068,6 @@ export function Dashboard() {
     </main>
   )
 }
-
 
 
 

@@ -13,14 +13,16 @@ interface ImportResultDetailsProps {
 export function ImportResultDetails({ summary }: ImportResultDetailsProps) {
   const errorDetails = summary.errorDetails ?? []
   const duplicateDetails = summary.duplicateDetails ?? []
+  const hasErrorDetails = errorDetails.length > 0
+  const hasDuplicateDetails = duplicateDetails.length > 0
 
-  if (errorDetails.length === 0 && duplicateDetails.length === 0) {
+  if (!hasErrorDetails && !hasDuplicateDetails) {
     return null
   }
 
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-      {errorDetails.length > 0 ? (
+    <div className={`mt-4 grid gap-4 ${hasErrorDetails && hasDuplicateDetails ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
+      {hasErrorDetails ? (
         <section className="overflow-hidden rounded-2xl border border-[#ffb8c2] bg-[#fff1f2]">
           <div className="flex items-center gap-2 border-b border-[#ffb8c2] px-5 py-3">
             <AlertTriangle className="h-4 w-4 text-[#dc2626]" aria-hidden="true" />
@@ -53,7 +55,7 @@ export function ImportResultDetails({ summary }: ImportResultDetailsProps) {
         </section>
       ) : null}
 
-      {duplicateDetails.length > 0 ? (
+      {hasDuplicateDetails ? (
         <section className="overflow-hidden rounded-2xl border border-[#ffe3ad] bg-[#fff9ec]">
           <div className="flex items-center gap-2 border-b border-[#ffe3ad] px-5 py-3">
             <Copy className="h-4 w-4 text-[#b45309]" aria-hidden="true" />
@@ -64,9 +66,11 @@ export function ImportResultDetails({ summary }: ImportResultDetailsProps) {
           <div className="max-h-64 overflow-y-auto">
             <ul className="divide-y divide-[#ffedc2]">
               {duplicateDetails.map((detail, index) => (
-                <li key={`${detail.rowNumber}-${index}`} className="flex items-center justify-between gap-3 px-5 py-2 text-xs">
+                <li key={`${detail.rowNumber}-${index}`} className="flex items-start justify-between gap-3 px-5 py-2 text-xs">
                   <span className="font-bold text-[#8a5a00]">Row {detail.rowNumber}</span>
-                  <span className="font-mono font-semibold text-[#8a5a00]">{detail.txnId ?? '-'}</span>
+                  <span className="min-w-0 break-all text-right font-mono font-semibold text-[#8a5a00]">
+                    {detail.txnId ?? '-'}
+                  </span>
                 </li>
               ))}
             </ul>
