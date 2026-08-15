@@ -284,6 +284,14 @@ export interface TransactionGroupSummary {
   txnId: string
   journal: string | null
   valueDate: string | null
+  // When this group's rows were received by ingest/import (earliest across the group).
+  uploadedAt: string | null
+  // When this group's rows were actually processed into a journal entry (earliest across the
+  // group) - still just the ingest-time default until a Process run touches these rows.
+  processedAt: string | null
+  odooReferenceId: string | null
+  // Best-effort deep link into the Odoo web UI - only populated once odooReferenceId is set.
+  odooEntryUrl: string | null
   totalAmount: number
   recordCount: number
 }

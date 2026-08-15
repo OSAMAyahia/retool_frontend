@@ -6,7 +6,9 @@ export const dashboardColumnLabels = [
   'journal_id',
   'amount',
   'records',
-  'value_date',
+  'uploaded date (receiving date)',
+  'processing date',
+  'odoo reference',
 ] as const
 
 export const journalColumnLabels = [

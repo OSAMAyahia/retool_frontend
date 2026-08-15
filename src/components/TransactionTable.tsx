@@ -1,7 +1,25 @@
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, ExternalLink } from 'lucide-react'
 import type { TransactionGroupSummary } from '../services/api'
 import type { SortDirection } from '../types/transaction'
 import { dashboardColumnLabels, displayDate } from '../utils/tableFields'
+
+// Unlike value_date (a literal date-only value from the imported file), uploadedAt/processedAt
+// are system timestamps with no original literal to preserve, so this intentionally shows the
+// viewer's own local time (what their wall clock says "now" was), including time-of-day.
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return '-'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  const hours24 = date.getHours()
+  const period = hours24 >= 12 ? 'PM' : 'AM'
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()} ${hours12}:${pad(date.getMinutes())} ${period}`
+}
 
 interface TransactionTableProps {
   groups: TransactionGroupSummary[]
@@ -83,12 +101,14 @@ export function TransactionTable({
     <div className="max-h-[680px] overflow-y-auto overflow-x-hidden bg-white">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[16%]" />
-          <col className="w-[26%]" />
-          <col className="w-[22%]" />
-          <col className="w-[16%]" />
-          <col className="w-[10%]" />
-          <col className="w-[10%]" />
+          <col className="w-[13%]" />
+          <col className="w-[19%]" />
+          <col className="w-[14%]" />
+          <col className="w-[9%]" />
+          <col className="w-[7%]" />
+          <col className="w-[13%]" />
+          <col className="w-[13%]" />
+          <col className="w-[12%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
