@@ -11,8 +11,11 @@ interface FilterBarProps {
   sourceLabel?: string
   accountLabel?: string
   accountPlaceholder?: string
-  // Journal page only: turns the Source dropdown (exact match) into a free-text "Journal ID"
-  // input bound to filters.journalId (partial, case-insensitive match) instead of filters.source.
+  // Journal page only: hides the Source dropdown (exact match on filters.source) since the
+  // dedicated free-text "Journal ID" field below (bound to filters.journalId, partial/
+  // case-insensitive) already covers journal search there per requirement 5.2. Dashboard keeps
+  // both fields - Source (its own dropdown) and Journal ID (free text) - since they filter
+  // different things there.
   journalIdMode?: boolean
   // localStorage key used to persist which fields are visible - unique per page usage so the
   // Dashboard and Journal page filter bars remember their own field selection independently.
@@ -29,18 +32,24 @@ interface FilterBarProps {
 const inputClass =
   'h-[52px] w-full rounded-xl border border-[#dfe6f4] bg-white/80 px-4 text-sm font-medium text-[#44527b] shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_8px_22px_rgba(52,68,110,0.04)] outline-none transition placeholder:text-[#8290b4] focus:border-[#5748f5] focus:ring-2 focus:ring-[#5748f5]/15'
 
-type FieldKey = 'status' | 'source' | 'account' | 'transactionId' | 'dateFrom' | 'dateTo'
+type FieldKey = 'status' | 'source' | 'journalId' | 'account' | 'transactionId' | 'dateFrom' | 'dateTo'
 
-const ALL_FIELDS: FieldKey[] = ['status', 'source', 'account', 'transactionId', 'dateFrom', 'dateTo']
+const ALL_FIELDS: FieldKey[] = ['status', 'source', 'journalId', 'account', 'transactionId', 'dateFrom', 'dateTo']
 
 const FIELD_TOGGLE_LABELS: Record<FieldKey, string> = {
   status: 'Status',
-  source: 'Source / Journal ID',
+  source: 'Source',
+  journalId: 'Journal ID',
   account: 'Account',
   transactionId: 'Transaction ID',
   dateFrom: 'From Date',
   dateTo: 'To Date',
 }
+
+// Fields that existed before "Journal ID" (and any future field) was added - a stored
+// visible-fields array only ever lists fields from this original set, so a field outside it
+// simply never had a chance to be recorded either way.
+const LEGACY_FIELDS: FieldKey[] = ['status', 'source', 'account', 'transactionId', 'dateFrom', 'dateTo']
 
 function loadVisibleFields(storageKey: string): FieldKey[] {
   try {
@@ -50,7 +59,11 @@ function loadVisibleFields(storageKey: string): FieldKey[] {
     }
     const parsed: unknown = JSON.parse(raw)
     if (Array.isArray(parsed)) {
-      const next = ALL_FIELDS.filter((field) => parsed.includes(field))
+      // A field introduced after a user's preference was already saved (e.g. Journal ID) isn't
+      // in their stored array at all - default those to visible instead of silently hiding them,
+      // since a brand-new column disappearing looks like a bug ("I can't search by Journal ID")
+      // rather than a preference the user needs to go re-enable from the gear menu.
+      const next = ALL_FIELDS.filter((field) => parsed.includes(field) || !LEGACY_FIELDS.includes(field))
       return next.length > 0 ? next : ALL_FIELDS
     }
   } catch {
@@ -141,47 +154,47 @@ export function FilterBar({
           </label>
         ) : null}
 
-        {isVisible('source') ? (
-          journalIdMode ? (
-            <label className="flex min-w-[180px] flex-1 flex-col gap-3 text-sm font-bold text-[#18234f]">
-              Journal ID
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-4 h-5 w-5 text-[#7380a7]" />
-                <input
-                  className={`${inputClass} pl-12`}
-                  placeholder="Search journal ID..."
-                  value={filters.journalId ?? ''}
-                  onChange={(event) =>
-                    onFiltersChange({
-                      ...filters,
-                      journalId: event.target.value,
-                    })
-                  }
-                />
-              </div>
-            </label>
-          ) : (
-            <label className="flex min-w-[180px] flex-1 flex-col gap-3 text-sm font-bold text-[#18234f]">
-              {sourceLabel}
-              <select
-                className={inputClass}
-                value={filters.source ?? ''}
+        {isVisible('source') && !journalIdMode ? (
+          <label className="flex min-w-[180px] flex-1 flex-col gap-3 text-sm font-bold text-[#18234f]">
+            {sourceLabel}
+            <select
+              className={inputClass}
+              value={filters.source ?? ''}
+              onChange={(event) =>
+                onFiltersChange({
+                  ...filters,
+                  source: event.target.value,
+                })
+              }
+            >
+              <option value="">All {sourceLabel}s</option>
+              {sources.map((source) => (
+                <option key={source} value={source}>
+                  {source}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {isVisible('journalId') ? (
+          <label className="flex min-w-[180px] flex-1 flex-col gap-3 text-sm font-bold text-[#18234f]">
+            Journal ID
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-4 h-5 w-5 text-[#7380a7]" />
+              <input
+                className={`${inputClass} pl-12`}
+                placeholder="Search journal ID..."
+                value={filters.journalId ?? ''}
                 onChange={(event) =>
                   onFiltersChange({
                     ...filters,
-                    source: event.target.value,
+                    journalId: event.target.value,
                   })
                 }
-              >
-                <option value="">All {sourceLabel}s</option>
-                {sources.map((source) => (
-                  <option key={source} value={source}>
-                    {source}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )
+              />
+            </div>
+          </label>
         ) : null}
 
         {isVisible('account') ? (

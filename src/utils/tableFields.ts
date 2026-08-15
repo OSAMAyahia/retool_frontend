@@ -4,11 +4,9 @@ export const dashboardColumnLabels = [
   'transaction date',
   'txn_id',
   'journal_id',
-  'account_number',
   'amount',
-  'cr_dr',
+  'records',
   'value_date',
-  'created_at',
 ] as const
 
 export const journalColumnLabels = [

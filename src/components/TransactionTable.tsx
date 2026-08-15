@@ -20,7 +20,7 @@ interface TransactionTableProps {
 // TransactionService.findTransactionGroups) - anything else falls back to the valueDate default.
 const SORTABLE_FIELDS: Partial<Record<(typeof dashboardColumnLabels)[number], string>> = {
   'transaction date': 'valueDate',
-  account_number: 'accountId',
+  txn_id: 'txnId',
 }
 
 function reasonTagLabel(reason?: string) {
@@ -83,14 +83,12 @@ export function TransactionTable({
     <div className="max-h-[680px] overflow-y-auto overflow-x-hidden bg-white">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[13%]" />
-          <col className="w-[20%]" />
-          <col className="w-[20%]" />
-          <col className="w-[12%]" />
+          <col className="w-[16%]" />
+          <col className="w-[26%]" />
+          <col className="w-[22%]" />
+          <col className="w-[16%]" />
           <col className="w-[10%]" />
-          <col className="w-[8%]" />
-          <col className="w-[9%]" />
-          <col className="w-[8%]" />
+          <col className="w-[10%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
@@ -131,7 +129,7 @@ export function TransactionTable({
             </tr>
           ) : (
             groups.map((group) => {
-              const key = `${group.valueDate ?? ''}|${group.accountId}|${group.type}`
+              const key = `${group.txnId}|${group.journal ?? ''}`
               return (
                 <tr
                   key={key}
@@ -156,7 +154,7 @@ export function TransactionTable({
                             </span>
                           ) : null}
                           <span className="truncate font-mono text-[13px] font-extrabold text-[#15214b]">
-                            {group.recordCount > 1 ? 'Grouped rows' : '1 row'}
+                            {group.txnId}
                           </span>
                         </span>
                         <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-bold text-[#7a86a6]">
@@ -172,12 +170,7 @@ export function TransactionTable({
                   </td>
                   <td className="px-3 align-middle">
                     <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">
-                      {group.recordCount > 1 ? 'Multiple' : '-'}
-                    </span>
-                  </td>
-                  <td className="px-3 align-middle">
-                    <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">
-                      {group.accountId}
+                      {group.journal ?? '-'}
                     </span>
                   </td>
                   <td className="px-3 text-left align-middle">
@@ -187,16 +180,13 @@ export function TransactionTable({
                   </td>
                   <td className="px-3 align-middle">
                     <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold uppercase text-[#33406f]">
-                      {group.type}
+                      {group.recordCount}
                     </span>
                   </td>
                   <td className="px-3 align-middle">
                     <span className="block truncate font-semibold text-[#2d3b68]">
                       {displayDate(group.valueDate) || '-'}
                     </span>
-                  </td>
-                  <td className="px-3 align-middle">
-                    <span className="block truncate font-semibold text-[#2d3b68]">-</span>
                   </td>
                 </tr>
               )

@@ -281,17 +281,17 @@ export async function getTransactions(
 }
 
 export interface TransactionGroupSummary {
+  txnId: string
+  journal: string | null
   valueDate: string | null
-  accountId: string
-  type: string
   totalAmount: number
   recordCount: number
 }
 
-// Grouped across the WHOLE filtered dataset in the database (value_date + account_id + type,
-// amounts summed), not just the current page - see /transactions/grouped on the backend. Used
-// by the Dashboard table so "Total Transactions" isn't undercounted to whatever page size the
-// UI happens to be showing.
+// Grouped across the WHOLE filtered dataset in the database (effective txn_id + effective
+// journal, amounts summed), not just the current page - see /transactions/grouped on the
+// backend. Used by the Dashboard table so "Total Transactions" isn't undercounted to whatever
+// page size the UI happens to be showing.
 export async function getTransactionGroups(
   filters: TransactionFilters,
   page: number,
@@ -324,6 +324,44 @@ export async function getTransactionGroups(
     totalElements: data.totalElements ?? content.length,
     totalPages: data.totalPages ?? (content.length > 0 ? 1 : 0),
   }
+}
+
+export interface TransactionGroupTreeAccountSummary {
+  account: string | null
+  totalDebit: number
+  totalCredit: number
+  recordCount: number
+  txnId: string
+  journal: string | null
+}
+
+export interface TransactionGroupTreeNode {
+  txnId: string
+  journal: string | null
+  accounts: TransactionGroupTreeAccountSummary[]
+}
+
+// Account-level drill-down for one (or every) txn_id/journal group from getTransactionGroups
+// above - see GET /transactions/grouped-tree on the backend. Used by the Dashboard's row-click
+// tree view (txn_id -> journal -> account_number). Passing txnId scopes the tree to just the
+// group the user clicked, avoiding recomputing the whole tree for a single click.
+export async function getTransactionGroupTree(
+  filters: TransactionFilters,
+  txnId?: string,
+): Promise<TransactionGroupTreeNode[]> {
+  const response = await api.get<TransactionGroupTreeNode[]>('/transactions/grouped-tree', {
+    params: {
+      internalStatus: filters.internalStatus || undefined,
+      source: filters.source || undefined,
+      accountId: filters.accountId || undefined,
+      dateFrom: toDateTimeFrom(filters.dateFrom),
+      dateTo: toDateTimeTo(filters.dateTo),
+      notCompletedReason: filters.rejectionReason || undefined,
+      txnId: txnId || undefined,
+    },
+  })
+
+  return response.data ?? []
 }
 
 function createEmptyIngestSummary(): IngestSummaryResponse {

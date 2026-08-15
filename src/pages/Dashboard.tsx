@@ -24,22 +24,24 @@ import { SummaryCards } from '../components/SummaryCards'
 import { TransactionDetailPanel } from '../components/TransactionDetailPanel'
 import { TransactionTable } from '../components/TransactionTable'
 import {
+  deleteTransaction,
   getJournals,
   getNotMappedAccounts,
   getSources,
   getTransactionById,
   getTransactionGroups,
+  getTransactionGroupTree,
   getTransactions,
   importTransactionsFile,
   ingestTransactions,
   processJournals,
   retryTransaction,
   type TransactionGroupSummary,
+  type TransactionGroupTreeNode,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
 import { parseExcelToTransactions } from '../utils/xlsxImport'
 import {
-  dashboardColumnLabels,
   displayDate,
   transactionCrDr,
   transactionDate,
@@ -124,8 +126,19 @@ function buildSummary(completed: number, unCompleted: number, journalRows: numbe
 
 type ExportFormat = 'excel' | 'csv'
 
+const transactionExportColumnLabels = [
+  'transaction date',
+  'txn_id',
+  'journal_id',
+  'account_number',
+  'amount',
+  'cr_dr',
+  'value_date',
+  'created_at',
+] as const
+
 function exportTransactionsFile(transactions: Transaction[], format: ExportFormat) {
-  const headers = dashboardColumnLabels
+  const headers = transactionExportColumnLabels
   const rows = transactions.map((transaction) => [
     displayDate(transactionDate(transaction)),
     transaction.transactionId,
@@ -163,8 +176,8 @@ export function Dashboard() {
   const [sources, setSources] = useState<string[]>(fallbackSources)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<TransactionGroupSummary | null>(null)
-  const [groupMembers, setGroupMembers] = useState<Transaction[]>([])
-  const [isLoadingGroupMembers, setIsLoadingGroupMembers] = useState(false)
+  const [groupTree, setGroupTree] = useState<TransactionGroupTreeNode[]>([])
+  const [isLoadingGroupTree, setIsLoadingGroupTree] = useState(false)
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(10)
   const [sortBy, setSortBy] = useState<string | undefined>(undefined)
@@ -177,6 +190,7 @@ export function Dashboard() {
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryMessage, setRetryMessage] = useState<string | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
+  const [isDeletingTransaction, setIsDeletingTransaction] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -444,31 +458,16 @@ export function Dashboard() {
   const handleSelectGroup = async (group: TransactionGroupSummary) => {
     setSelectedTransaction(null)
     setSelectedGroup(group)
-    setGroupMembers([])
-    setIsLoadingGroupMembers(true)
+    setGroupTree([])
+    setIsLoadingGroupTree(true)
 
     try {
-      const response = await getTransactions(
-        {
-          ...filters,
-          accountId: group.accountId,
-          dateFrom: group.valueDate ? group.valueDate.slice(0, 10) : undefined,
-          dateTo: group.valueDate ? group.valueDate.slice(0, 10) : undefined,
-        },
-        0,
-        200,
-      )
-      // The accountId filter above is a partial (LIKE) match on the backend, so narrow to an
-      // exact account + Debit/Credit match here to guarantee only this group's real members
-      // are shown, even if another account number happens to contain this one as a substring.
-      const members = response.content.filter(
-        (item) => item.accountId === group.accountId && (transactionCrDr(item) ?? '') === group.type,
-      )
-      setGroupMembers(members)
+      const tree = await getTransactionGroupTree(filters, group.txnId)
+      setGroupTree(tree)
     } catch {
-      setGroupMembers([])
+      setGroupTree([])
     } finally {
-      setIsLoadingGroupMembers(false)
+      setIsLoadingGroupTree(false)
     }
   }
 
@@ -492,6 +491,36 @@ export function Dashboard() {
       setRetryError(`Retry failed. ${getApiErrorMessage(retryRequestError)}`)
     } finally {
       setIsRetrying(false)
+    }
+  }
+
+  const handleDeleteTransaction = async (transaction: Transaction) => {
+    if (!window.confirm(`Delete transaction ${transaction.transactionId}? This cannot be undone.`)) {
+      return
+    }
+    setIsDeletingTransaction(true)
+    setRetryMessage(null)
+    setRetryError(null)
+    try {
+      await deleteTransaction(transaction.transactionId)
+      setRetryMessage(`Deleted transaction ${transaction.transactionId}.`)
+      if (selectedTransaction?.transactionId === transaction.transactionId) {
+        setSelectedTransaction(null)
+      }
+      if (selectedGroup) {
+        try {
+          setGroupTree(await getTransactionGroupTree(filters, selectedGroup.txnId))
+        } catch {
+          // Keep whatever tree was already shown rather than clearing it on a refresh failure.
+        }
+      }
+      await loadTransactions(false)
+      await loadTransactionGroups(false)
+      await loadTransactionStatusCounts()
+    } catch (deleteError) {
+      setRetryError(getApiErrorMessage(deleteError))
+    } finally {
+      setIsDeletingTransaction(false)
     }
   }
 
@@ -972,9 +1001,10 @@ export function Dashboard() {
       <TransactionDetailPanel
         transaction={selectedTransaction}
         group={selectedGroup}
-        groupMembers={groupMembers}
-        isLoadingGroupMembers={isLoadingGroupMembers}
+        groupTree={groupTree}
+        isLoadingGroupTree={isLoadingGroupTree}
         isRetrying={isRetrying}
+        isDeleting={isDeletingTransaction}
         retryMessage={retryMessage}
         retryError={retryError}
         onClose={() => {
@@ -982,6 +1012,7 @@ export function Dashboard() {
           setSelectedGroup(null)
         }}
         onRetry={handleRetry}
+        onDelete={(transaction) => void handleDeleteTransaction(transaction)}
         onSelectFromGroup={(transaction) => void handleSelectTransaction(transaction)}
       />
       {isNotMappedAccountsOpen ? (
