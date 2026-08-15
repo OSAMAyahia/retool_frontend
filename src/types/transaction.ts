@@ -124,6 +124,10 @@ export interface ImportRowError {
 export interface DuplicateRowInfo {
   rowNumber: number
   txnId: string | null
+  // The skipped row's full original field set (every CSV/JSON column, not just txn_id) - shape
+  // varies per import (whatever headers the file had), so it's an open record rather than a
+  // fixed interface. Optional/possibly empty on older backend responses.
+  row?: Record<string, unknown> | null
 }
 
 export interface IngestSummaryResponse {
