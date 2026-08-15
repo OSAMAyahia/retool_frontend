@@ -101,14 +101,14 @@ export function TransactionTable({
     <div className="max-h-[680px] overflow-y-auto overflow-x-hidden bg-white">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
         <colgroup>
-          <col className="w-[13%]" />
-          <col className="w-[19%]" />
-          <col className="w-[14%]" />
-          <col className="w-[9%]" />
-          <col className="w-[7%]" />
-          <col className="w-[13%]" />
-          <col className="w-[13%]" />
+          <col className="w-[11%]" />
+          <col className="w-[18%]" />
           <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[7%]" />
+          <col className="w-[17%]" />
+          <col className="w-[14%]" />
+          <col className="w-[11%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
@@ -118,12 +118,12 @@ export function TransactionTable({
               return (
                 <th
                   key={`${column}-${index}`}
-                  className={`h-11 whitespace-nowrap px-3 text-xs font-extrabold uppercase tracking-[0.03em] text-left ${
+                  className={`min-h-11 px-3 py-3 text-left text-xs font-extrabold uppercase leading-tight tracking-[0.03em] ${
                     sortField && onSort ? 'cursor-pointer select-none hover:text-[#33406f]' : ''
                   }`}
                   onClick={sortField && onSort ? () => onSort(sortField) : undefined}
                 >
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 break-words">
                     {column}
                     {sortField ? (
                       isActive && sortDir === 'desc' ? (

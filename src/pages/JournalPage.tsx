@@ -566,7 +566,7 @@ export function JournalPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 xl:justify-end">
             <div className="flex h-11 min-w-[168px] items-center gap-2 rounded-lg border border-[#dfe6f4] bg-white/80 px-3 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
               <RotateCw className="h-4 w-4 text-[#5748f5]" aria-hidden="true" />
               <span>
@@ -670,7 +670,7 @@ export function JournalPage() {
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               {selectedDeletableIds.length > 0 ? `Delete Selected (${selectedDeletableIds.length})` : 'Delete Selected'}
             </button>
-            <div className="inline-flex h-11 items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white/80 p-1 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
+            <div className="inline-flex h-11 max-w-full items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white/80 p-1 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
               <button
                 className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition ${
                   viewMode === 'table' ? 'bg-[#5748f5] text-white' : 'text-[#5748f5] hover:bg-[#f7f8ff]'
@@ -820,6 +820,5 @@ export function JournalPage() {
     </main>
   )
 }
-
 
 

@@ -92,7 +92,7 @@ export function JournalTable({
         </colgroup>
         <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
           <tr>
-            <th className="h-12 whitespace-nowrap px-5 text-xs font-extrabold uppercase tracking-[0.04em]">
+            <th className="min-h-12 px-5 py-3 text-xs font-extrabold uppercase leading-tight tracking-[0.04em]">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -108,12 +108,12 @@ export function JournalTable({
               return (
                 <th
                   key={column}
-                  className={`h-12 whitespace-nowrap px-5 text-xs font-extrabold uppercase tracking-[0.04em] ${
+                  className={`min-h-12 px-5 py-3 text-xs font-extrabold uppercase leading-tight tracking-[0.04em] ${
                     isSortable ? 'cursor-pointer select-none hover:text-[#33406f]' : ''
                   }`}
                   onClick={isSortable ? () => onSort?.(sortField as string) : undefined}
                 >
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 break-words">
                     {column}
                     {sortField ? (
                       isActive && sortDir === 'desc' ? (
@@ -126,7 +126,7 @@ export function JournalTable({
                 </th>
               )
             })}
-            <th className="h-12 whitespace-nowrap px-5 text-xs font-extrabold uppercase tracking-[0.04em]">
+            <th className="min-h-12 px-5 py-3 text-xs font-extrabold uppercase leading-tight tracking-[0.04em]">
               Actions
             </th>
           </tr>
