@@ -33,6 +33,8 @@ type UserDraft = {
   displayName: string
   role: 'ADMIN' | 'USER'
   active: boolean
+  canEditTransactions: boolean
+  canDeleteTransactions: boolean
   password: string
 }
 
@@ -62,6 +64,8 @@ function userToDraft(user: AdminUser): UserDraft {
     displayName: user.displayName,
     role: user.role,
     active: user.active,
+    canEditTransactions: user.canEditTransactions,
+    canDeleteTransactions: user.canDeleteTransactions,
     password: '',
   }
 }
@@ -89,6 +93,8 @@ export function AdminPage() {
     displayName: '',
     role: 'USER',
     active: true,
+    canEditTransactions: false,
+    canDeleteTransactions: false,
   })
   const [newStatus, setNewStatus] = useState({
     code: '',
@@ -148,7 +154,15 @@ export function AdminPage() {
       const created = await createAdminUser(newUser)
       setUsers((current) => [...current, created].sort((a, b) => a.username.localeCompare(b.username)))
       setUserDrafts((current) => ({ ...current, [created.id]: userToDraft(created) }))
-      setNewUser({ username: '', password: '', displayName: '', role: 'USER', active: true })
+      setNewUser({
+        username: '',
+        password: '',
+        displayName: '',
+        role: 'USER',
+        active: true,
+        canEditTransactions: false,
+        canDeleteTransactions: false,
+      })
       setMessage('User saved.')
     } catch (createError) {
       setError(errorMessage(createError))
@@ -168,6 +182,8 @@ export function AdminPage() {
         displayName: draft.displayName,
         role: draft.role,
         active: draft.active,
+        canEditTransactions: draft.role === 'ADMIN' ? true : draft.canEditTransactions,
+        canDeleteTransactions: draft.role === 'ADMIN' ? true : draft.canDeleteTransactions,
         password: draft.password || undefined,
       })
       setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)))
@@ -296,7 +312,7 @@ export function AdminPage() {
               <h2 className="text-lg font-extrabold text-[#111b45]">Users</h2>
             </div>
 
-            <form className="grid gap-3 border-b border-[#dfe6f4] p-5 lg:grid-cols-[1fr_1fr_1fr_auto_auto]" onSubmit={handleCreateUser}>
+            <form className="grid gap-3 border-b border-[#dfe6f4] p-5 lg:grid-cols-[1fr_1fr_1fr_auto_auto_auto_auto]" onSubmit={handleCreateUser}>
               <input
                 className={inputClass}
                 placeholder="Username"
@@ -320,12 +336,49 @@ export function AdminPage() {
                 className={inputClass}
                 value={newUser.role}
                 onChange={(event) =>
-                  setNewUser((current) => ({ ...current, role: event.target.value as 'ADMIN' | 'USER' }))
+                  setNewUser((current) => {
+                    const nextRole = event.target.value as 'ADMIN' | 'USER'
+                    const next = { ...current, role: nextRole }
+                    if (nextRole === 'ADMIN') {
+                      return { ...next, canEditTransactions: true, canDeleteTransactions: true }
+                    }
+                    return next
+                  })
                 }
               >
                 <option value="USER">User</option>
                 <option value="ADMIN">Admin</option>
               </select>
+              <label className="flex h-11 items-center gap-2 rounded-lg border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452]">
+                <input
+                  className="h-4 w-4 accent-[#2563eb]"
+                  type="checkbox"
+                  checked={newUser.role === 'ADMIN' ? true : Boolean(newUser.canEditTransactions)}
+                  disabled={newUser.role === 'ADMIN'}
+                  onChange={(event) =>
+                    setNewUser((current) => ({
+                      ...current,
+                      canEditTransactions: event.target.checked,
+                    }))
+                  }
+                />
+                Edit txns
+              </label>
+              <label className="flex h-11 items-center gap-2 rounded-lg border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452]">
+                <input
+                  className="h-4 w-4 accent-[#2563eb]"
+                  type="checkbox"
+                  checked={newUser.role === 'ADMIN' ? true : Boolean(newUser.canDeleteTransactions)}
+                  disabled={newUser.role === 'ADMIN'}
+                  onChange={(event) =>
+                    setNewUser((current) => ({
+                      ...current,
+                      canDeleteTransactions: event.target.checked,
+                    }))
+                  }
+                />
+                Delete txns
+              </label>
               <button className={`${buttonClass} bg-[#2563eb] text-white hover:bg-[#1d4ed8]`} type="submit" disabled={isSaving}>
                 <Plus className="h-5 w-5" aria-hidden="true" />
                 Add
@@ -333,13 +386,15 @@ export function AdminPage() {
             </form>
 
             <div className="overflow-x-auto">
-              <table className="min-w-[980px] table-fixed text-left text-sm">
+              <table className="min-w-[1180px] table-fixed text-left text-sm">
                 <thead className="bg-[#f8fbff] text-[#627194]">
                   <tr>
                     <th className="px-5 py-3 font-bold">Username</th>
                     <th className="px-5 py-3 font-bold">Display name</th>
                     <th className="px-5 py-3 font-bold">Role</th>
                     <th className="px-5 py-3 font-bold">Active</th>
+                    <th className="px-5 py-3 font-bold">Edit txns</th>
+                    <th className="px-5 py-3 font-bold">Delete txns</th>
                     <th className="px-5 py-3 font-bold">New password</th>
                     <th className="px-5 py-3 font-bold">Action</th>
                   </tr>
@@ -370,7 +425,13 @@ export function AdminPage() {
                             onChange={(event) =>
                               setUserDrafts((current) => ({
                                 ...current,
-                                [adminUser.id]: { ...draft, role: event.target.value as 'ADMIN' | 'USER' },
+                                [adminUser.id]: {
+                                  ...draft,
+                                  role: event.target.value as 'ADMIN' | 'USER',
+                                  ...(event.target.value === 'ADMIN'
+                                    ? { canEditTransactions: true, canDeleteTransactions: true }
+                                    : {}),
+                                },
                               }))
                             }
                           >
@@ -387,6 +448,34 @@ export function AdminPage() {
                               setUserDrafts((current) => ({
                                 ...current,
                                 [adminUser.id]: { ...draft, active: event.target.checked },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-5 py-4">
+                          <input
+                            className="h-5 w-5 accent-[#2563eb]"
+                            type="checkbox"
+                            checked={draft.role === 'ADMIN' ? true : draft.canEditTransactions}
+                            disabled={draft.role === 'ADMIN'}
+                            onChange={(event) =>
+                              setUserDrafts((current) => ({
+                                ...current,
+                                [adminUser.id]: { ...draft, canEditTransactions: event.target.checked },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-5 py-4">
+                          <input
+                            className="h-5 w-5 accent-[#2563eb]"
+                            type="checkbox"
+                            checked={draft.role === 'ADMIN' ? true : draft.canDeleteTransactions}
+                            disabled={draft.role === 'ADMIN'}
+                            onChange={(event) =>
+                              setUserDrafts((current) => ({
+                                ...current,
+                                [adminUser.id]: { ...draft, canDeleteTransactions: event.target.checked },
                               }))
                             }
                           />

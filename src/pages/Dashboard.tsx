@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { ExcelImportModal } from '../components/ExcelImportModal'
+import { EditTransactionAmountModal } from '../components/EditTransactionAmountModal'
 import { FilterBar } from '../components/FilterBar'
 import { ImportResultDetails } from '../components/ImportResultDetails'
 import { NotMappedAccountsModal } from '../components/NotMappedAccountsModal'
@@ -36,6 +37,7 @@ import {
   ingestTransactions,
   processJournals,
   retryTransaction,
+  updateTransactionAmount,
   type TransactionGroupSummary,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
@@ -165,6 +167,8 @@ function exportTransactionsFile(transactions: Transaction[], format: ExportForma
 export function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const canDeleteTransactions = user?.canDeleteTransactions ?? false
+  const canEditTransactions = user?.canEditTransactions ?? false
   const excelInputRef = useRef<HTMLInputElement | null>(null)
   const csvInputRef = useRef<HTMLInputElement | null>(null)
   const [filters, setFilters] = useState<TransactionFilters>({ internalStatus: 'un-completed' })
@@ -191,6 +195,10 @@ export function Dashboard() {
   const [retryMessage, setRetryMessage] = useState<string | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
   const [isDeletingTransaction, setIsDeletingTransaction] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editAmountError, setEditAmountError] = useState<string | null>(null)
+  const [isUpdatingAmount, setIsUpdatingAmount] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -503,6 +511,46 @@ export function Dashboard() {
       setRetryError(getApiErrorMessage(deleteError))
     } finally {
       setIsDeletingTransaction(false)
+    }
+  }
+
+  const handleOpenEditAmount = (transaction: Transaction) => {
+    setEditingTransaction(transaction)
+    setEditAmount(String(transaction.amount))
+    setEditAmountError(null)
+    setRetryMessage(null)
+    setRetryError(null)
+  }
+
+  const handleSubmitEditAmount = async () => {
+    if (!editingTransaction) {
+      return
+    }
+
+    const parsedAmount = Number(editAmount)
+    if (!Number.isFinite(parsedAmount)) {
+      setEditAmountError('Amount must be a valid number.')
+      return
+    }
+
+    setIsUpdatingAmount(true)
+    setEditAmountError(null)
+
+    try {
+      const updated = await updateTransactionAmount(editingTransaction.transactionId, parsedAmount)
+      setRetryMessage(`Updated amount for ${editingTransaction.transactionId}.`)
+      if (selectedTransaction?.transactionId === editingTransaction.transactionId) {
+        setSelectedTransaction(updated)
+      }
+      setEditingTransaction(null)
+      setTreeRefreshSignal((current) => current + 1)
+      await loadTransactions(false)
+      await loadTransactionGroups(false)
+      await loadTransactionStatusCounts()
+    } catch (updateError) {
+      setEditAmountError(getApiErrorMessage(updateError))
+    } finally {
+      setIsUpdatingAmount(false)
     }
   }
 
@@ -983,13 +1031,15 @@ export function Dashboard() {
                 filters={filters}
                 refreshSignal={treeRefreshSignal}
                 isDeleting={isDeletingTransaction}
+                isUpdatingAmount={isUpdatingAmount}
                 activeReason={filters.internalStatus === 'un-completed' ? filters.rejectionReason : undefined}
                 sortBy={sortBy}
                 sortDir={sortDir}
                 onSort={handleSort}
                 onSelectTransaction={(transaction) => void handleSelectTransaction(transaction)}
-                onDelete={(transaction) => void handleDeleteTransaction(transaction)}
-                onBulkDelete={(transactionIds) => void handleBulkDeleteTransactions(transactionIds)}
+                onEditAmount={canEditTransactions ? handleOpenEditAmount : undefined}
+                onDelete={canDeleteTransactions ? (transaction) => void handleDeleteTransaction(transaction) : undefined}
+                onBulkDelete={canDeleteTransactions ? (transactionIds) => void handleBulkDeleteTransactions(transactionIds) : undefined}
               />
 
               <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
@@ -1085,6 +1135,23 @@ export function Dashboard() {
           </div>
         </div>
       ) : null}
+      {editingTransaction ? (
+        <EditTransactionAmountModal
+          transaction={editingTransaction}
+          amount={editAmount}
+          isSubmitting={isUpdatingAmount}
+          error={editAmountError}
+          onAmountChange={setEditAmount}
+          onClose={() => {
+            if (isUpdatingAmount) {
+              return
+            }
+            setEditingTransaction(null)
+            setEditAmountError(null)
+          }}
+          onSubmit={() => void handleSubmitEditAmount()}
+        />
+      ) : null}
       <TransactionDetailPanel
         transaction={selectedTransaction}
         isRetrying={isRetrying}
@@ -1093,7 +1160,7 @@ export function Dashboard() {
         retryError={retryError}
         onClose={() => setSelectedTransaction(null)}
         onRetry={handleRetry}
-        onDelete={(transaction) => void handleDeleteTransaction(transaction)}
+        onDelete={canDeleteTransactions ? (transaction) => void handleDeleteTransaction(transaction) : undefined}
       />
       {isNotMappedAccountsOpen ? (
         <NotMappedAccountsModal
@@ -1105,10 +1172,6 @@ export function Dashboard() {
     </main>
   )
 }
-
-
-
-
 
 
 

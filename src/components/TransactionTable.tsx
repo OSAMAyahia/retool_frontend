@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Pencil, Trash2 } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import { getJournalTransactions, getTransactionGroupTree, type TransactionGroupSummary, type TransactionGroupTreeNode } from '../services/api'
 import type { SortDirection, Transaction, TransactionFilters } from '../types/transaction'
@@ -15,6 +15,7 @@ interface TransactionTableProps {
   // it "the underlying data changed, go refresh what you're showing."
   refreshSignal?: number
   isDeleting?: boolean
+  isUpdatingAmount?: boolean
   // When the Dashboard's "Not mapped"/"Not balanced" sub-filter is active, every visible row
   // already matches that reason (it's the query's WHERE clause) - shown as a small tag next to
   // each row so it's clear why these rows never became a Journal Table entry.
@@ -24,6 +25,7 @@ interface TransactionTableProps {
   onSort?: (field: string) => void
   onSelectTransaction: (transaction: Transaction) => void
   onDelete?: (transaction: Transaction) => void
+  onEditAmount?: (transaction: Transaction) => void
   // Deletes every selected leaf transaction (across any number of expanded txn_id rows) in one
   // confirm. Optional so the checkbox column and "Delete Selected" bar only render when wired up.
   onBulkDelete?: (transactionIds: string[]) => void
@@ -145,12 +147,14 @@ export function TransactionTable({
   filters,
   refreshSignal,
   isDeleting = false,
+  isUpdatingAmount = false,
   activeReason,
   sortBy,
   sortDir,
   onSort,
   onSelectTransaction,
   onDelete,
+  onEditAmount,
   onBulkDelete,
 }: TransactionTableProps) {
   const reasonLabelForBadge = reasonTagLabel(activeReason)
@@ -695,21 +699,38 @@ export function TransactionTable({
                                                         {sanitizeOdooReference(item.odooReferenceId) ?? '-'}
                                                       </td>
                                                       <td className="px-3 align-middle">
-                                                        {onDelete ? (
-                                                          <button
-                                                            type="button"
-                                                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                                                            title="Delete this transaction"
-                                                            aria-label={`Delete transaction ${item.transactionId}`}
-                                                            disabled={isDeleting}
-                                                            onClick={(event) => {
-                                                              event.stopPropagation()
-                                                              onDelete(item)
-                                                            }}
-                                                          >
-                                                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                                          </button>
-                                                        ) : null}
+                                                        <div className="flex items-center gap-2">
+                                                          {onEditAmount && item.notCompletedReason === 'NOT_BALANCED' ? (
+                                                            <button
+                                                              type="button"
+                                                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-[#eef2ff] hover:text-[#4338ca] disabled:cursor-not-allowed disabled:opacity-50"
+                                                              title="Edit amount"
+                                                              aria-label={`Edit amount for transaction ${item.transactionId}`}
+                                                              disabled={isUpdatingAmount || isDeleting}
+                                                              onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                onEditAmount(item)
+                                                              }}
+                                                            >
+                                                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                                            </button>
+                                                          ) : null}
+                                                          {onDelete ? (
+                                                            <button
+                                                              type="button"
+                                                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                              title="Delete this transaction"
+                                                              aria-label={`Delete transaction ${item.transactionId}`}
+                                                              disabled={isDeleting || isUpdatingAmount}
+                                                              onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                onDelete(item)
+                                                              }}
+                                                            >
+                                                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                                            </button>
+                                                          ) : null}
+                                                        </div>
                                                       </td>
                                                     </tr>
                                                   ))

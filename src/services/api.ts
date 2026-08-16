@@ -33,6 +33,11 @@ export interface AdminUser {
   displayName: string
   role: 'ADMIN' | 'USER'
   active: boolean
+  // Effective grants - already true for every ADMIN regardless of the underlying per-user flags,
+  // so the UI can gate the edit/delete icons directly off these without re-deriving the
+  // ADMIN special-case itself.
+  canEditTransactions: boolean
+  canDeleteTransactions: boolean
   createdAt: string
   updatedAt: string
 }
@@ -65,6 +70,8 @@ export interface CreateUserPayload {
   displayName?: string
   role: 'ADMIN' | 'USER'
   active: boolean
+  canEditTransactions?: boolean
+  canDeleteTransactions?: boolean
 }
 
 export interface UpdateUserPayload {
@@ -72,6 +79,8 @@ export interface UpdateUserPayload {
   displayName?: string
   role?: 'ADMIN' | 'USER'
   active?: boolean
+  canEditTransactions?: boolean
+  canDeleteTransactions?: boolean
 }
 
 export interface CreateStatusPayload {
@@ -726,6 +735,21 @@ export async function deleteTransaction(transactionId: string): Promise<void> {
   }
 }
 
+export async function updateTransactionAmount(transactionId: string, amount: number): Promise<Transaction> {
+  try {
+    const response = await api.patch<BackendTransaction>(
+      `/transactions/${encodeURIComponent(transactionId)}/amount`,
+      { amount },
+    )
+    return normalizeTransaction(response.data)
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 409) {
+      throw new Error('This transaction is already part of a journal entry sent to Odoo and cannot be edited.')
+    }
+    throw error
+  }
+}
+
 // Backed by the dedicated archive tables (see JournalStatusService.markSent), not a status=SENT
 // filter over /journals - a sent entry is moved OUT of the live journal_entries/journals tables
 // the instant it's sent, so it would never show up there again regardless of filter.
@@ -889,7 +913,6 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
-
 
 
 
