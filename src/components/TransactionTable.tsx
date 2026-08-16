@@ -243,7 +243,9 @@ export function TransactionTable({
           if (!state.expandedAccounts.has(aKey) || state.retriedEmptyAccounts.has(aKey)) {
             return
           }
-          const matchCount = state.leafTransactions.filter((item) => item.accountId === account.account).length
+          const matchCount = state.leafTransactions.filter(
+            (item) => item.accountId === account.account && transactionJournalId(item) === (node.journal ?? ''),
+          ).length
           if (matchCount === 0 && (account.recordCount ?? 0) > 0) {
             updateRow(txnId, (current) => ({
               ...current,
@@ -563,8 +565,17 @@ export function TransactionTable({
                                   : node.accounts.map((account, accountIndex) => {
                                       const aKey = `${jKey}::${account.account ?? accountIndex}`
                                       const isAccountOpen = rowState.expandedAccounts.has(aKey)
+                                      // Also match the journal, not just the account - the leaves
+                                      // fetch returns every leg for the whole txn_id at once
+                                      // (across every journal it touches), so filtering by
+                                      // account alone could pull in a leg that shares this
+                                      // account under a DIFFERENT journal, showing a journal_id
+                                      // on the leaf row that doesn't match the node it's nested
+                                      // under.
                                       const accountTransactions = rowState.leavesLoaded
-                                        ? rowState.leafTransactions.filter((item) => item.accountId === account.account)
+                                        ? rowState.leafTransactions.filter(
+                                            (item) => item.accountId === account.account && transactionJournalId(item) === (node.journal ?? ''),
+                                          )
                                         : []
 
                                       return (
