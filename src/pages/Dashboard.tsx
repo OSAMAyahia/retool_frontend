@@ -292,14 +292,18 @@ export function Dashboard() {
         completed: completedResponse.totalElements,
         unCompleted: unCompletedResponse.totalElements,
       })
-      setReasonCounts({
+      const reasons = {
         notMapped: notMappedResponse.totalElements,
         notBalanced: notBalancedResponse.totalElements,
         differenceAccountMissing: differenceAccountMissingResponse.totalElements,
-      })
+      }
+      setReasonCounts(reasons)
+      return reasons
     } catch {
       setStatusCounts({ completed: 0, unCompleted: 0 })
-      setReasonCounts({ notMapped: 0, notBalanced: 0, differenceAccountMissing: 0 })
+      const reasons = { notMapped: 0, notBalanced: 0, differenceAccountMissing: 0 }
+      setReasonCounts(reasons)
+      return reasons
     }
   }, [])
 
@@ -693,11 +697,29 @@ export function Dashboard() {
           setActionMessage('Still processing journal entries on the server…')
         }
       })
-      setActionMessage(`Journal processing created ${result.processed} balanced journal entries.`)
       await loadTransactions(false)
       await loadTransactionGroups(false)
-      await loadTransactionStatusCounts()
+      const reasons = await loadTransactionStatusCounts()
       await loadJournalCount()
+
+      const stillBlocked = reasons.notMapped + reasons.notBalanced + reasons.differenceAccountMissing
+      if (stillBlocked > 0) {
+        const parts: string[] = []
+        if (reasons.notMapped > 0) {
+          parts.push(`${reasons.notMapped} not mapped (account_number missing from the Odoo mapping table)`)
+        }
+        if (reasons.notBalanced > 0) {
+          parts.push(`${reasons.notBalanced} not balanced (debit ≠ credit)`)
+        }
+        if (reasons.differenceAccountMissing > 0) {
+          parts.push(`${reasons.differenceAccountMissing} missing a configured difference account`)
+        }
+        setActionMessage(
+          `Journal processing created ${result.processed} balanced journal entries. ${stillBlocked} row(s) still blocked: ${parts.join(', ')}. Open a blocked row for the exact account/field.`,
+        )
+      } else {
+        setActionMessage(`Journal processing created ${result.processed} balanced journal entries.`)
+      }
     } catch (processError) {
       setActionError(`Journal processing failed. ${getApiErrorMessage(processError)}`)
     } finally {

@@ -182,7 +182,22 @@ export function TransactionTable({
   const fetchLeaves = async (txnId: string) => {
     updateRow(txnId, (state) => ({ ...state, isLoadingLeaves: true, leavesFailed: false }))
     try {
-      const transactions = await getJournalTransactions(txnId)
+      const allTransactions = await getJournalTransactions(txnId)
+      // GET /journals/{txnId}/transactions is deliberately unfiltered on the backend (it backs
+      // the Journal page's "View Transactions", which needs every leg regardless of status) - but
+      // here, under this Dashboard tree, showing an already-completed leg while the user has
+      // "Not completed" applied elsewhere reads as if the filter isn't being respected. Apply the
+      // same status/reason filters client-side so the leaf rows match what the rest of the
+      // filtered view is showing.
+      const transactions = allTransactions.filter((item) => {
+        if (filters.internalStatus && item.internalStatus !== filters.internalStatus) {
+          return false
+        }
+        if (filters.rejectionReason && item.notCompletedReason !== filters.rejectionReason) {
+          return false
+        }
+        return true
+      })
       updateRow(txnId, (state) => ({ ...state, leafTransactions: transactions, isLoadingLeaves: false, leavesLoaded: true, leavesFailed: false }))
     } catch {
       // Don't cache this as "loaded, empty" - leavesLoaded stays false so the next toggle (or
