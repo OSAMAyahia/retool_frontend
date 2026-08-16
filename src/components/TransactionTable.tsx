@@ -266,7 +266,12 @@ export function TransactionTable({
       })
       return next
     })
+    // Fetch the tree AND the leaf transactions in parallel as soon as the txn_id row opens,
+    // instead of waiting for the user to drill into an account first - by the time they click an
+    // account, the leaves are usually already loaded (or close to it), instead of only starting
+    // that request at the moment of the click and making them watch it happen.
     void fetchTree(txnId)
+    void fetchLeaves(txnId)
   }
 
   const toggleJournal = (txnId: string, key: string) => {
