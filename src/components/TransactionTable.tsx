@@ -113,6 +113,10 @@ interface TxnRowState {
   leafTransactions: Transaction[]
   isLoadingLeaves: boolean
   leavesLoaded: boolean
+  // Account keys that have already been auto-retried once after coming up empty on the first
+  // pass - see the auto-retry effect below. Prevents retrying the same account forever if it's
+  // genuinely empty rather than just lagging.
+  retriedEmptyAccounts: Set<string>
   // True only when the leaves fetch itself errored (network/5xx) - kept distinct from "loaded,
   // genuinely empty" so a transient failure shows a "couldn't load, click to retry" message
   // instead of the misleading "No individual rows found for this account leg."
@@ -205,6 +209,39 @@ export function TransactionTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal])
 
+  // Self-heals the "opened an account and it showed empty, but closing + reopening fixed it"
+  // symptom: if an account the tree says has records (recordCount > 0) comes up with zero
+  // matching rows in the already-loaded leaves list, that's the same inconsistency a manual
+  // close+reopen was papering over - retry the leaves fetch once automatically instead of
+  // making the user do it by hand. Capped at one retry per account (retriedEmptyAccounts) so a
+  // genuinely-empty account (data itself is inconsistent, not just lagging) doesn't loop forever.
+  useEffect(() => {
+    for (const [txnId, state] of rowStates) {
+      if (!state.leavesLoaded || state.leavesFailed) {
+        continue
+      }
+      for (const node of state.tree) {
+        const journalIndex = state.tree.indexOf(node)
+        const jKey = journalKeyOf(node, journalIndex)
+        node.accounts.forEach((account, accountIndex) => {
+          const aKey = `${jKey}::${account.account ?? accountIndex}`
+          if (!state.expandedAccounts.has(aKey) || state.retriedEmptyAccounts.has(aKey)) {
+            return
+          }
+          const matchCount = state.leafTransactions.filter((item) => item.accountId === account.account).length
+          if (matchCount === 0 && (account.recordCount ?? 0) > 0) {
+            updateRow(txnId, (current) => ({
+              ...current,
+              retriedEmptyAccounts: new Set(current.retriedEmptyAccounts).add(aKey),
+            }))
+            void fetchLeaves(txnId)
+          }
+        })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowStates])
+
   const toggleTxn = (txnId: string) => {
     if (rowStates.has(txnId)) {
       setRowStates((current) => {
@@ -224,6 +261,7 @@ export function TransactionTable({
         leafTransactions: [],
         isLoadingLeaves: false,
         leavesLoaded: false,
+        retriedEmptyAccounts: new Set(),
         leavesFailed: false,
       })
       return next
