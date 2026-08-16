@@ -547,7 +547,7 @@ export function TransactionTable({
                                           </tr>
 
                                           {isAccountOpen
-                                            ? rowState.isLoadingLeaves && !rowState.leavesLoaded
+                                            ? !rowState.leavesLoaded && !rowState.leavesFailed
                                               ? (
                                                 <tr className="border-b border-[#edf1f8]">
                                                   <td className="px-3 py-3" colSpan={columns.length}>
