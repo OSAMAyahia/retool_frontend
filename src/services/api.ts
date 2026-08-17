@@ -356,6 +356,8 @@ export interface TransactionGroupTreeAccountSummary {
 export interface TransactionGroupTreeNode {
   txnId: string
   journal: string | null
+  odooReferenceId?: string | null
+  odooEntryUrl?: string | null
   accounts: TransactionGroupTreeAccountSummary[]
 }
 
@@ -913,6 +915,5 @@ export async function updateTransactionStatus(
   const response = await api.put<TransactionStatus>(`/admin/statuses/${encodeURIComponent(code)}`, payload)
   return response.data
 }
-
 
 

@@ -31,11 +31,6 @@ interface TransactionTableProps {
   onBulkDelete?: (transactionIds: string[]) => void
 }
 
-// Same columns as before, plus a leading checkbox column (only meaningful at leaf rows) and a
-// trailing Actions column for the per-row delete button - the txn_id/journal/account tree is
-// rendered as indented rows within this SAME table, one screen, no separate view to navigate to.
-const columns = ['', ...dashboardColumnLabels, 'actions'] as const
-
 // Whitelisted on the backend for GET /transactions/grouped (see
 // TransactionService.findTransactionGroups) - anything else falls back to the valueDate default.
 const SORTABLE_FIELDS: Partial<Record<(typeof dashboardColumnLabels)[number], string>> = {
@@ -125,7 +120,7 @@ interface TxnRowState {
   leavesFailed: boolean
 }
 
-function LoadingRows() {
+function LoadingRows({ columns }: { columns: string[] }) {
   return (
     <>
       {Array.from({ length: 6 }).map((_, rowIndex) => (
@@ -158,6 +153,8 @@ export function TransactionTable({
   onBulkDelete,
 }: TransactionTableProps) {
   const reasonLabelForBadge = reasonTagLabel(activeReason)
+  const showActions = Boolean(onDelete || onEditAmount)
+  const columns = ['', ...dashboardColumnLabels, ...(showActions ? ['actions'] : [])]
   const [rowStates, setRowStates] = useState<Map<string, TxnRowState>>(new Map())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -368,7 +365,7 @@ export function TransactionTable({
             <col className="w-[14%]" />
             <col className="w-[12%]" />
             <col className="w-[9%]" />
-            <col className="w-[6%]" />
+            {showActions ? <col className="w-[6%]" /> : null}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#627194] shadow-[inset_0_-1px_0_#dfe6f4]">
             <tr>
@@ -400,7 +397,7 @@ export function TransactionTable({
           </thead>
           <tbody>
             {isLoading ? (
-              <LoadingRows />
+              <LoadingRows columns={columns} />
             ) : groups.length === 0 ? (
               <tr>
                 <td className="px-3 py-14 text-center text-sm font-semibold text-[#657295]" colSpan={columns.length}>
@@ -477,26 +474,9 @@ export function TransactionTable({
                         </span>
                       </td>
                       <td className="px-3 align-middle">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="min-w-0 truncate font-mono text-xs font-semibold text-[#2d3b68]">
-                            {sanitizeOdooReference(group.odooReferenceId) ?? '-'}
-                          </span>
-                          {group.odooEntryUrl ? (
-                            <button
-                              type="button"
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#5748f5] transition hover:bg-[#f1f5fb]"
-                              title="Open this entry in Odoo"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                window.open(group.odooEntryUrl ?? '', '_blank')
-                              }}
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          ) : null}
-                        </span>
+                        <span className="block truncate font-mono text-xs font-semibold text-[#b7c0d8]">-</span>
                       </td>
-                      <td className="px-3 align-middle" />
+                      {showActions ? <td className="px-3 align-middle" /> : null}
                     </tr>
 
                     {isOpen ? (
@@ -553,8 +533,27 @@ export function TransactionTable({
                                 </td>
                                 <td className="px-3 align-middle text-xs text-[#b7c0d8]">-</td>
                                 <td className="px-3 align-middle text-xs text-[#b7c0d8]">-</td>
-                                <td className="px-3 align-middle text-xs text-[#b7c0d8]">-</td>
-                                <td className="px-3 align-middle" />
+                                <td className="px-3 align-middle">
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <span className="min-w-0 truncate font-mono text-xs font-semibold text-[#2d3b68]">
+                                      {sanitizeOdooReference(node.odooReferenceId) ?? '-'}
+                                    </span>
+                                    {node.odooEntryUrl ? (
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#5748f5] transition hover:bg-[#f1f5fb]"
+                                        title="Open this entry in Odoo"
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          window.open(node.odooEntryUrl ?? '', '_blank')
+                                        }}
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                      </button>
+                                    ) : null}
+                                  </span>
+                                </td>
+                                {showActions ? <td className="px-3 align-middle" /> : null}
                               </tr>
 
                               {isJournalOpen
@@ -616,7 +615,7 @@ export function TransactionTable({
                                             <td className="px-3 align-middle text-xs text-[#b7c0d8]">-</td>
                                             <td className="px-3 align-middle text-xs text-[#b7c0d8]">-</td>
                                             <td className="px-3 align-middle text-xs text-[#b7c0d8]">-</td>
-                                            <td className="px-3 align-middle" />
+                                            {showActions ? <td className="px-3 align-middle" /> : null}
                                           </tr>
 
                                           {isAccountOpen
@@ -698,40 +697,42 @@ export function TransactionTable({
                                                       <td className="px-3 align-middle font-mono text-xs font-semibold text-[#2d3b68]">
                                                         {sanitizeOdooReference(item.odooReferenceId) ?? '-'}
                                                       </td>
-                                                      <td className="px-3 align-middle">
-                                                        <div className="flex items-center gap-2">
-                                                          {onEditAmount && item.notCompletedReason === 'NOT_BALANCED' ? (
-                                                            <button
-                                                              type="button"
-                                                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-[#eef2ff] hover:text-[#4338ca] disabled:cursor-not-allowed disabled:opacity-50"
-                                                              title="Edit amount"
-                                                              aria-label={`Edit amount for transaction ${item.transactionId}`}
-                                                              disabled={isUpdatingAmount || isDeleting}
-                                                              onClick={(event) => {
-                                                                event.stopPropagation()
-                                                                onEditAmount(item)
-                                                              }}
-                                                            >
-                                                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                                                            </button>
-                                                          ) : null}
-                                                          {onDelete ? (
-                                                            <button
-                                                              type="button"
-                                                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                                                              title="Delete this transaction"
-                                                              aria-label={`Delete transaction ${item.transactionId}`}
-                                                              disabled={isDeleting || isUpdatingAmount}
-                                                              onClick={(event) => {
-                                                                event.stopPropagation()
-                                                                onDelete(item)
-                                                              }}
-                                                            >
-                                                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                                            </button>
-                                                          ) : null}
-                                                        </div>
-                                                      </td>
+                                                      {showActions ? (
+                                                        <td className="px-3 align-middle">
+                                                          <div className="flex items-center gap-2">
+                                                            {onEditAmount && item.notCompletedReason === 'NOT_BALANCED' ? (
+                                                              <button
+                                                                type="button"
+                                                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-[#eef2ff] hover:text-[#4338ca] disabled:cursor-not-allowed disabled:opacity-50"
+                                                                title="Edit amount"
+                                                                aria-label={`Edit amount for transaction ${item.transactionId}`}
+                                                                disabled={isUpdatingAmount || isDeleting}
+                                                                onClick={(event) => {
+                                                                  event.stopPropagation()
+                                                                  onEditAmount(item)
+                                                                }}
+                                                              >
+                                                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                                              </button>
+                                                            ) : null}
+                                                            {onDelete ? (
+                                                              <button
+                                                                type="button"
+                                                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                title="Delete this transaction"
+                                                                aria-label={`Delete transaction ${item.transactionId}`}
+                                                                disabled={isDeleting || isUpdatingAmount}
+                                                                onClick={(event) => {
+                                                                  event.stopPropagation()
+                                                                  onDelete(item)
+                                                                }}
+                                                              >
+                                                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                                              </button>
+                                                            ) : null}
+                                                          </div>
+                                                        </td>
+                                                      ) : null}
                                                     </tr>
                                                   ))
                                             : null}

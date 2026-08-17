@@ -12,7 +12,6 @@ import {
   Send,
   ShieldCheck,
   Table2,
-  Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -24,7 +23,7 @@ import { JournalTreeView } from '../components/JournalTreeView'
 import { ProgressBar } from '../components/ProgressBar'
 import { SummaryCards, type SummaryCardSubFilter } from '../components/SummaryCards'
 import { Toast, type ToastMessage } from '../components/Toast'
-import { archiveJournals, deleteJournal, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
+import { archiveJournals, getJournalById, getJournals, sendJournalsToOdoo } from '../services/api'
 import type {
   Journal,
   PageResponse,
@@ -180,7 +179,6 @@ export function JournalPage() {
   const [sortDir, setSortDir] = useState<SortDirection | undefined>(undefined)
   const [filterResetSignal, setFilterResetSignal] = useState(0)
   const [viewMode, setViewMode] = useState<'table' | 'tree'>('table')
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const summary = useMemo(
     () => buildJournalSummary(statusCounts.total, statusCounts.sent),
@@ -203,15 +201,6 @@ export function JournalPage() {
     () =>
       journalsPage.content
         .filter((journal) => selectedIds.has(journal.transactionId) && journal.status === 'SENT')
-        .map((journal) => journal.transactionId),
-    [journalsPage.content, selectedIds],
-  )
-  // Deletion is blocked (409) once an entry is SENT to Odoo - only offer bulk-delete on the rest
-  // of the selection, same filtering pattern as selectedSentIds above.
-  const selectedDeletableIds = useMemo(
-    () =>
-      journalsPage.content
-        .filter((journal) => selectedIds.has(journal.transactionId) && journal.status !== 'SENT')
         .map((journal) => journal.transactionId),
     [journalsPage.content, selectedIds],
   )
@@ -476,78 +465,6 @@ export function JournalPage() {
     }
   }
 
-  const handleDeleteJournal = async (journal: Journal) => {
-    if (journal.status === 'SENT') {
-      setToast({ tone: 'error', text: 'This journal entry has already been sent to Odoo and cannot be deleted.' })
-      return
-    }
-    if (!window.confirm(`Delete journal entry ${journal.transactionId}? This cannot be undone.`)) {
-      return
-    }
-    setIsDeleting(true)
-    try {
-      await deleteJournal(journal.transactionId)
-      setToast({ tone: 'success', text: `Deleted journal entry ${journal.transactionId}.` })
-      setSelectedIds((current) => {
-        const next = new Set(current)
-        next.delete(journal.transactionId)
-        return next
-      })
-      await loadJournals(false)
-      await loadStatusCounts()
-    } catch (error) {
-      setToast({ tone: 'error', text: getApiErrorMessage(error) })
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-
-  const handleDeleteSelected = async () => {
-    if (selectedIds.size === 0) {
-      return
-    }
-    if (selectedDeletableIds.length === 0) {
-      setToast({
-        tone: 'error',
-        text: 'None of the selected rows can be deleted - Sent journal entries cannot be deleted.',
-      })
-      return
-    }
-    if (
-      !window.confirm(
-        `Delete ${selectedDeletableIds.length} selected journal ${selectedDeletableIds.length === 1 ? 'entry' : 'entries'}? This cannot be undone.`,
-      )
-    ) {
-      return
-    }
-    setIsDeleting(true)
-    const failures: string[] = []
-    try {
-      for (const transactionId of selectedDeletableIds) {
-        try {
-          await deleteJournal(transactionId)
-        } catch (error) {
-          failures.push(`${transactionId}: ${getApiErrorMessage(error)}`)
-        }
-      }
-      const succeeded = selectedDeletableIds.length - failures.length
-      if (succeeded > 0) {
-        setToast({ tone: 'success', text: `Deleted ${succeeded} journal entries.` })
-      }
-      if (failures.length > 0) {
-        setToast({
-          tone: 'error',
-          text: `${failures.length} of the selected rows could not be deleted (already sent to Odoo).`,
-        })
-      }
-      setSelectedIds(new Set())
-      await loadJournals(false)
-      await loadStatusCounts()
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
@@ -655,20 +572,6 @@ export function JournalPage() {
             >
               <Archive className="h-4 w-4" aria-hidden="true" />
               {selectedSentIds.length > 0 ? `Archive Selected (${selectedSentIds.length})` : 'Archive Selected'}
-            </button>
-            <button
-              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#ffb8c2] bg-[#fff1f2] px-4 text-xs font-extrabold text-[#dc2626] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              onClick={() => void handleDeleteSelected()}
-              disabled={isDeleting || selectedIds.size === 0}
-              title={
-                selectedDeletableIds.length > 0
-                  ? `Delete ${selectedDeletableIds.length} selected journal entries`
-                  : 'Select one or more non-Sent rows to delete them'
-              }
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              {selectedDeletableIds.length > 0 ? `Delete Selected (${selectedDeletableIds.length})` : 'Delete Selected'}
             </button>
             <div className="inline-flex h-11 max-w-full items-center gap-1 rounded-lg border border-[#dfe6f4] bg-white/80 p-1 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
               <button
@@ -779,7 +682,6 @@ export function JournalPage() {
                 sortBy={sortBy}
                 sortDir={sortDir}
                 onSort={handleSort}
-                onDeleteJournal={(journal) => void handleDeleteJournal(journal)}
               />
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295]">
                 <span>
@@ -820,5 +722,3 @@ export function JournalPage() {
     </main>
   )
 }
-
-

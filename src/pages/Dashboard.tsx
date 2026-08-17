@@ -547,6 +547,7 @@ export function Dashboard() {
       await loadTransactions(false)
       await loadTransactionGroups(false)
       await loadTransactionStatusCounts()
+      await loadJournalCount()
     } catch (updateError) {
       setEditAmountError(getApiErrorMessage(updateError))
     } finally {
@@ -1037,9 +1038,17 @@ export function Dashboard() {
                 sortDir={sortDir}
                 onSort={handleSort}
                 onSelectTransaction={(transaction) => void handleSelectTransaction(transaction)}
-                onEditAmount={canEditTransactions ? handleOpenEditAmount : undefined}
-                onDelete={canDeleteTransactions ? (transaction) => void handleDeleteTransaction(transaction) : undefined}
-                onBulkDelete={canDeleteTransactions ? (transactionIds) => void handleBulkDeleteTransactions(transactionIds) : undefined}
+                onEditAmount={canEditTransactions && filters.internalStatus !== 'completed' ? handleOpenEditAmount : undefined}
+                onDelete={
+                  canDeleteTransactions && filters.internalStatus !== 'completed'
+                    ? (transaction) => void handleDeleteTransaction(transaction)
+                    : undefined
+                }
+                onBulkDelete={
+                  canDeleteTransactions && filters.internalStatus !== 'completed'
+                    ? (transactionIds) => void handleBulkDeleteTransactions(transactionIds)
+                    : undefined
+                }
               />
 
               <div className="flex min-h-[76px] flex-col gap-4 border-t border-[#dfe6f4] px-6 py-4 text-sm font-medium text-[#657295] sm:flex-row sm:items-center sm:justify-between">
@@ -1172,8 +1181,6 @@ export function Dashboard() {
     </main>
   )
 }
-
-
 
 
 
