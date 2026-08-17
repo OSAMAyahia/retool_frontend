@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import type { Journal, SortDirection } from '../types/transaction'
 import { displayDate, journalColumnLabels, sanitizeOdooReference } from '../utils/tableFields'
 import { StatusBadge } from './StatusBadge'
@@ -196,7 +196,7 @@ export function JournalTable({
                 ? sanitizeOdooReference(group.entries[0].odooReferenceId)
                 : null
 
-              const rows: JSX.Element[] = []
+              const rows: ReactNode[] = []
 
               if (isExpandable) {
                 rows.push(
