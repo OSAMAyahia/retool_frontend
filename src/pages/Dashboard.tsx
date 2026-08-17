@@ -1169,7 +1169,11 @@ export function Dashboard() {
         retryError={retryError}
         onClose={() => setSelectedTransaction(null)}
         onRetry={handleRetry}
-        onDelete={canDeleteTransactions ? (transaction) => void handleDeleteTransaction(transaction) : undefined}
+        onDelete={
+          canDeleteTransactions && filters.internalStatus !== 'completed' && selectedTransaction?.internalStatus !== 'completed'
+            ? (transaction) => void handleDeleteTransaction(transaction)
+            : undefined
+        }
       />
       {isNotMappedAccountsOpen ? (
         <NotMappedAccountsModal
@@ -1181,7 +1185,6 @@ export function Dashboard() {
     </main>
   )
 }
-
 
 
 
