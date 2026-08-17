@@ -157,6 +157,20 @@ export function TransactionTable({
   const columns = ['', ...dashboardColumnLabels, ...(showActions ? ['actions'] : [])]
   const [rowStates, setRowStates] = useState<Map<string, TxnRowState>>(new Map())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const deletableSelectedIds = (() => {
+    if (!onBulkDelete || selectedIds.size === 0) {
+      return []
+    }
+    const deletable = new Set<string>()
+    for (const state of rowStates.values()) {
+      for (const item of state.leafTransactions) {
+        if (selectedIds.has(item.transactionId) && item.internalStatus !== 'completed') {
+          deletable.add(item.transactionId)
+        }
+      }
+    }
+    return Array.from(deletable)
+  })()
 
   const updateRow = (txnId: string, updater: (state: TxnRowState) => TxnRowState) => {
     setRowStates((current) => {
@@ -335,20 +349,20 @@ export function TransactionTable({
 
   return (
     <div className="bg-white">
-      {onBulkDelete && selectedIds.size > 0 ? (
+      {onBulkDelete && deletableSelectedIds.length > 0 ? (
         <div className="flex items-center justify-between gap-4 border-b border-[#dfe6f4] bg-[#fff7f7] px-6 py-3">
-          <span className="text-sm font-bold text-[#7a0f24]">{selectedIds.size} transaction(s) selected</span>
+          <span className="text-sm font-bold text-[#7a0f24]">{deletableSelectedIds.length} transaction(s) selected</span>
           <button
             type="button"
             className="inline-flex h-9 items-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-bold text-red-600 shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isDeleting}
             onClick={() => {
-              onBulkDelete(Array.from(selectedIds))
+              onBulkDelete(deletableSelectedIds)
               setSelectedIds(new Set())
             }}
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
-            Delete Selected ({selectedIds.size})
+            Delete Selected ({deletableSelectedIds.length})
           </button>
         </div>
       ) : null}
@@ -660,7 +674,7 @@ export function TransactionTable({
                                                       onClick={() => onSelectTransaction(item)}
                                                     >
                                                       <td className="px-3 align-middle" onClick={(event) => event.stopPropagation()}>
-                                                        {onBulkDelete ? (
+                                                        {onBulkDelete && item.internalStatus !== 'completed' ? (
                                                           <input
                                                             type="checkbox"
                                                             className="h-4 w-4 rounded border-[#dfe6f4] accent-[#5748f5]"
@@ -715,7 +729,7 @@ export function TransactionTable({
                                                                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                                                               </button>
                                                             ) : null}
-                                                            {onDelete ? (
+                                                            {onDelete && item.internalStatus !== 'completed' ? (
                                                               <button
                                                                 type="button"
                                                                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#94a3c4] transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
