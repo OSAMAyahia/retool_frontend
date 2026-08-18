@@ -1,5 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Trash2 } from 'lucide-react'
-import { type ReactNode, useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, ExternalLink, Trash2 } from 'lucide-react'
 import type { Journal, SortDirection } from '../types/transaction'
 import { displayDate, journalColumnLabels, sanitizeOdooReference } from '../utils/tableFields'
 import { StatusBadge } from './StatusBadge'
@@ -78,48 +77,6 @@ export function JournalTable({
   onDeleteJournal,
 }: JournalTableProps) {
   const allSelected = journals.length > 0 && journals.every((journal) => selectedIds.has(journal.transactionId))
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-
-  const groupedJournals = useMemo(() => {
-    const groups: { baseId: string; entries: Journal[] }[] = []
-    const indexByBase = new Map<string, number>()
-    journals.forEach((journal) => {
-      const baseId = baseTxnId(journal.transactionId)
-      const existingIndex = indexByBase.get(baseId)
-      if (existingIndex == null) {
-        indexByBase.set(baseId, groups.length)
-        groups.push({ baseId, entries: [journal] })
-      } else {
-        groups[existingIndex].entries.push(journal)
-      }
-    })
-    return groups
-  }, [journals])
-
-  const toggleGroupExpanded = (baseId: string) => {
-    setExpandedGroups((current) => {
-      const next = new Set(current)
-      if (next.has(baseId)) {
-        next.delete(baseId)
-      } else {
-        next.add(baseId)
-      }
-      return next
-    })
-  }
-
-  const toggleGroupSelection = (group: { baseId: string; entries: Journal[] }) => {
-    const allInGroupSelected = group.entries.length > 0 && group.entries.every((entry) => selectedIds.has(entry.transactionId))
-    group.entries.forEach((entry) => {
-      const isSelected = selectedIds.has(entry.transactionId)
-      if (allInGroupSelected && isSelected) {
-        onToggleRow(entry.transactionId)
-      }
-      if (!allInGroupSelected && !isSelected) {
-        onToggleRow(entry.transactionId)
-      }
-    })
-  }
 
   return (
     <div className="max-h-[720px] overflow-y-auto bg-white">
@@ -188,192 +145,98 @@ export function JournalTable({
               </td>
             </tr>
           ) : (
-            groupedJournals.flatMap((group) => {
-              const isExpandable = group.entries.length > 1
-              const isExpanded = expandedGroups.has(group.baseId)
-              const groupSelected = group.entries.length > 0 && group.entries.every((entry) => selectedIds.has(entry.transactionId))
-              const groupRef = group.entries.every((entry) => entry.odooReferenceId === group.entries[0].odooReferenceId)
-                ? sanitizeOdooReference(group.entries[0].odooReferenceId)
-                : null
-
-              const rows: ReactNode[] = []
-
-              if (isExpandable) {
-                rows.push(
-                  <tr
-                    key={`${group.baseId}::group`}
-                    className="cursor-pointer border-b border-[#edf1f8] bg-[#f8fbff] transition hover:bg-[#eef6ff]"
-                    onClick={() => toggleGroupExpanded(group.baseId)}
-                  >
-                    <td className="h-[64px] px-5 align-middle" onClick={(event) => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={groupSelected}
-                        onChange={() => toggleGroupSelection(group)}
-                        aria-label={`Select journal entry group ${group.baseId}`}
-                      />
-                    </td>
-                    <td className="h-[64px] px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="flex min-w-0 items-center gap-2">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 shrink-0 text-[#5748f5]" aria-hidden="true" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 shrink-0 text-[#5748f5]" aria-hidden="true" />
-                        )}
-                        <span className="rounded-md bg-[#5748f5] px-1.5 py-0.5 text-[10px] font-extrabold text-white">
-                          ×{group.entries.length}
-                        </span>
-                        <span className="block min-w-0 truncate font-mono text-[13px] font-extrabold text-[#15214b]">
-                          {group.baseId}
-                        </span>
-                      </span>
-                      <span className="mt-1 block truncate text-xs font-bold text-[#7a86a6]">
-                        Click to expand grouped entries
-                      </span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="inline-flex min-w-10 justify-center rounded-lg bg-[#eef1fa] px-2.5 py-1 text-xs font-extrabold text-[#33406f]">
-                        {group.entries.reduce((sum, entry) => sum + (entry.lineCount ?? 0), 0)}
-                      </span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate font-mono text-xs font-bold text-[#2d3b68]">{groupRef ?? '-'}</span>
-                    </td>
-                    <td className="px-5 align-middle">
-                      <span className="block truncate text-xs font-semibold text-[#b7c0d8]">-</span>
-                    </td>
-                  </tr>,
-                )
-              }
-
-              if (!isExpandable || isExpanded) {
-                group.entries.forEach((journal) => {
-                  rows.push(
-                    <tr
-                      key={journal.transactionId}
-                      className="cursor-pointer border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]"
-                      onClick={() => onSelect(journal)}
+            journals.map((journal) => (
+              <tr
+                key={journal.transactionId}
+                className="cursor-pointer border-b border-[#edf1f8] bg-white transition hover:bg-[#f8fbff]"
+                onClick={() => onSelect(journal)}
+              >
+                <td className="h-[64px] px-5 align-middle" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(journal.transactionId)}
+                    onChange={() => onToggleRow(journal.transactionId)}
+                    aria-label={`Select journal entry ${journal.transactionId}`}
+                  />
+                </td>
+                <td className="h-[64px] px-5 align-middle">
+                  <span className="block truncate font-semibold text-[#2d3b68]">{displayDate(journal.journalDate) || '-'}</span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="block truncate font-mono text-[13px] font-extrabold text-[#15214b]">
+                    {baseTxnId(journal.transactionId)}
+                  </span>
+                  <span className="mt-1 block truncate text-xs font-bold text-[#7a86a6]">Click to view all journal lines</span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">{journal.journal ?? '-'}</span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
+                    {formatMoney(journal.totalDebit)}
+                  </span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
+                    {formatMoney(journal.totalCredit)}
+                  </span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="inline-flex min-w-10 justify-center rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold text-[#33406f]">
+                    {journal.lineCount}
+                  </span>
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="block truncate font-semibold text-[#2d3b68]">{displayDate(journal.createdAt) || '-'}</span>
+                </td>
+                <td className="px-5 align-middle">
+                  <StatusBadge status={journal.status} />
+                  {journal.status === 'REJECTED' && journal.errorMessage ? (
+                    <span
+                      className="mt-1 block max-w-[220px] truncate text-[11px] font-bold text-[#dc2626]"
+                      title={journal.errorMessage}
                     >
-                      <td className="h-[64px] px-5 align-middle" onClick={(event) => event.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(journal.transactionId)}
-                          onChange={() => onToggleRow(journal.transactionId)}
-                          aria-label={`Select journal entry ${journal.transactionId}`}
-                        />
-                      </td>
-                      <td className="h-[64px] px-5 align-middle">
-                        <span className="block truncate font-semibold text-[#2d3b68]">
-                          {displayDate(journal.journalDate) || '-'}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span className="block truncate font-mono text-[13px] font-extrabold text-[#15214b]">
-                          {isExpandable ? <span className="pl-6">{baseTxnId(journal.transactionId)}</span> : baseTxnId(journal.transactionId)}
-                        </span>
-                        <span className="mt-1 block truncate text-xs font-bold text-[#7a86a6]">
-                          Click to view all journal lines
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span className="block truncate font-mono text-[13px] font-bold text-[#2d3b68]">
-                          {journal.journal ?? '-'}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
-                          {formatMoney(journal.totalDebit)}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span className="block whitespace-nowrap font-extrabold tabular-nums text-[#16214c]">
-                          {formatMoney(journal.totalCredit)}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span className="inline-flex min-w-10 justify-center rounded-lg bg-[#f1f5fb] px-2.5 py-1 text-xs font-extrabold text-[#33406f]">
-                          {journal.lineCount}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span className="block truncate font-semibold text-[#2d3b68]">
-                          {displayDate(journal.createdAt) || '-'}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle">
-                        <StatusBadge status={journal.status} />
-                        {journal.status === 'REJECTED' && journal.errorMessage ? (
-                          <span
-                            className="mt-1 block max-w-[220px] truncate text-[11px] font-bold text-[#dc2626]"
-                            title={journal.errorMessage}
-                          >
-                            {journal.rejectionReason === 'NOT_MAPPED'
-                              ? 'Not mapped'
-                              : journal.rejectionReason === 'NOT_BALANCED'
-                                ? 'Not balanced'
-                                : journal.errorMessage}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-5 align-middle">
-                        <span
-                          className="block truncate font-mono text-xs font-bold text-[#2d3b68]"
-                          title={journal.odooReferenceId ?? undefined}
-                        >
-                          {sanitizeOdooReference(journal.odooReferenceId) ?? '-'}
-                        </span>
-                      </td>
-                      <td className="px-5 align-middle" onClick={(event) => event.stopPropagation()}>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#dfe6f4] bg-white px-2.5 text-xs font-bold text-[#493ee8] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
-                            onClick={() => journal.odooEntryUrl && window.open(journal.odooEntryUrl, '_blank')}
-                            disabled={!journal.odooEntryUrl}
-                            title={journal.odooEntryUrl ? 'Open this entry in Odoo' : 'Not sent to Odoo yet'}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            Odoo
-                          </button>
-                          {onDeleteJournal ? (
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#ffb8c2] bg-white text-[#dc2626] transition hover:bg-[#fff1f2] disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() => onDeleteJournal(journal)}
-                              disabled={journal.status === 'SENT'}
-                              aria-label={`Delete journal entry ${journal.transactionId}`}
-                              title={journal.status === 'SENT' ? 'Sent entries cannot be deleted' : 'Delete this journal entry'}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>,
-                  )
-                })
-              }
-
-              return rows
-            })
+                      {journal.rejectionReason === 'NOT_MAPPED'
+                        ? 'Not mapped'
+                        : journal.rejectionReason === 'NOT_BALANCED'
+                          ? 'Not balanced'
+                          : journal.errorMessage}
+                    </span>
+                  ) : null}
+                </td>
+                <td className="px-5 align-middle">
+                  <span className="block truncate font-mono text-xs font-bold text-[#2d3b68]" title={journal.odooReferenceId ?? undefined}>
+                    {sanitizeOdooReference(journal.odooReferenceId) ?? '-'}
+                  </span>
+                </td>
+                <td className="px-5 align-middle" onClick={(event) => event.stopPropagation()}>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#dfe6f4] bg-white px-2.5 text-xs font-bold text-[#493ee8] transition hover:bg-[#f7f8ff] disabled:cursor-not-allowed disabled:opacity-40"
+                      onClick={() => journal.odooEntryUrl && window.open(journal.odooEntryUrl, '_blank')}
+                      disabled={!journal.odooEntryUrl}
+                      title={journal.odooEntryUrl ? 'Open this entry in Odoo' : 'Not sent to Odoo yet'}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                      Odoo
+                    </button>
+                    {onDeleteJournal ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#ffb8c2] bg-white text-[#dc2626] transition hover:bg-[#fff1f2] disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => onDeleteJournal(journal)}
+                        disabled={journal.status === 'SENT'}
+                        aria-label={`Delete journal entry ${journal.transactionId}`}
+                        title={journal.status === 'SENT' ? 'Sent entries cannot be deleted' : 'Delete this journal entry'}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))
           )}
         </tbody>
       </table>
