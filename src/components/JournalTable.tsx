@@ -287,7 +287,7 @@ export function JournalTable({
                       </td>
                       <td className="px-5 align-middle">
                         <span className="block truncate font-mono text-[13px] font-extrabold text-[#15214b]">
-                          {isExpandable ? <span className="pl-6">{journal.transactionId}</span> : journal.transactionId}
+                          {isExpandable ? <span className="pl-6">{baseTxnId(journal.transactionId)}</span> : baseTxnId(journal.transactionId)}
                         </span>
                         <span className="mt-1 block truncate text-xs font-bold text-[#7a86a6]">
                           Click to view all journal lines
