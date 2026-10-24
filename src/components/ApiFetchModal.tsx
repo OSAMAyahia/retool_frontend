@@ -21,8 +21,27 @@ const POLL_INTERVAL_MS = 2000
 const inputClass =
   'h-11 w-full rounded-lg border border-[#dfe6f4] bg-white px-3 text-sm font-semibold text-[#172452] outline-none focus:border-[#5748f5] focus:ring-2 focus:ring-[#5748f5]/15'
 
+// YYYY-MM-DD in the browser's local time (toISOString alone would give the UTC day).
+function toLocalIsoDate(date: Date) {
+  const offsetMs = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10)
+}
+
 function todayIso() {
-  return new Date().toISOString().slice(0, 10)
+  return toLocalIsoDate(new Date())
+}
+
+// Default start date = the day of the most recent successful fetch, automatic or manual, so the
+// popup picks up where the last fetch left off. No fetch yet (or it was today) = today.
+function lastFetchDate(runs: (JournalApiRunSummary | null)[]) {
+  const times = runs
+    .filter((candidate): candidate is JournalApiRunSummary => candidate?.status === 'SUCCESS')
+    .map((candidate) => new Date(candidate.startedAt).getTime())
+    .filter((time) => Number.isFinite(time))
+  if (times.length === 0) {
+    return todayIso()
+  }
+  return toLocalIsoDate(new Date(Math.max(...times)))
 }
 
 // Manual "Fetch from API" popup: the user picks exactly which journal entries to pull from the
@@ -43,12 +62,18 @@ export function ApiFetchModal({ onClose, onCompleted }: ApiFetchModalProps) {
   // Only report completion for a run this popup started - not an automatic run that happened to
   // be in flight when it opened.
   const startedHereRef = useRef(false)
+  // Only prefill the start date from the last fetch until the user edits it themselves.
+  const startDateTouchedRef = useRef(false)
 
   const loadStatus = useCallback(async () => {
     try {
       const status = await getJournalApiStatus()
       setRun(status.currentRun)
       setIsRunning(status.running)
+      if (!startDateTouchedRef.current) {
+        const startDate = lastFetchDate([status.lastAutoRun, status.lastManualRun])
+        setForm((current) => ({ ...current, startDate }))
+      }
       if (!status.running && startedHereRef.current && status.currentRun) {
         startedHereRef.current = false
         if (status.currentRun.status === 'SUCCESS') {
@@ -100,6 +125,7 @@ export function ApiFetchModal({ onClose, onCompleted }: ApiFetchModalProps) {
     try {
       const status = await startJournalApiFetch(payload)
       startedHereRef.current = true
+      startDateTouchedRef.current = true
       setRun(status.currentRun)
       setIsRunning(true)
     } catch (submitError) {
@@ -140,7 +166,10 @@ export function ApiFetchModal({ onClose, onCompleted }: ApiFetchModalProps) {
                 className={inputClass}
                 type="date"
                 value={form.startDate}
-                onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))}
+                onChange={(event) => {
+                  startDateTouchedRef.current = true
+                  setForm((current) => ({ ...current, startDate: event.target.value }))
+                }}
                 disabled={isRunning}
               />
             </label>
@@ -190,6 +219,7 @@ export function ApiFetchModal({ onClose, onCompleted }: ApiFetchModalProps) {
             </label>
           </div>
           <p className="mt-3 text-xs font-medium text-[#6b7794]">
+            Start date defaults to the day of the last fetch (automatic or manual), or today if none.
             Empty dates fall back to the API defaults (last 3 months up to today). Rows already in the
             dashboard are skipped as duplicates.
           </p>
