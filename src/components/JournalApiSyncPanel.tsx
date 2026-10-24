@@ -149,7 +149,10 @@ export function JournalApiSyncPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#dfe6f4] px-5 py-4">
         <div className="flex items-center gap-3">
           <CloudDownload className="h-5 w-5 text-[#2563eb]" aria-hidden="true" />
-          <h2 className="text-lg font-extrabold text-[#111b45]">Journal API Sync</h2>
+          <div>
+            <h2 className="text-lg font-extrabold text-[#111b45]">Journal API Sync</h2>
+            <p className="text-xs font-medium text-[#6b7794]">Fetching transactions from the Journal Entries API (incoming)</p>
+          </div>
         </div>
         <span
           className={`rounded-full px-3 py-1 text-xs font-extrabold ${

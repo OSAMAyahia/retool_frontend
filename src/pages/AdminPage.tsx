@@ -516,7 +516,10 @@ export function AdminPage() {
           <section className="rounded-xl border border-[#dfe6f4] bg-white">
             <div className="flex items-center gap-3 border-b border-[#dfe6f4] px-5 py-4">
               <SlidersHorizontal className="h-5 w-5 text-[#2563eb]" aria-hidden="true" />
-              <h2 className="text-lg font-extrabold text-[#111b45]">Odoo Config</h2>
+              <div>
+                <h2 className="text-lg font-extrabold text-[#111b45]">Odoo Config</h2>
+                <p className="text-xs font-medium text-[#6b7794]">Sending journal entries to Odoo (outgoing)</p>
+              </div>
             </div>
 
             <form className="grid gap-5 p-5" onSubmit={handleSaveConfig}>

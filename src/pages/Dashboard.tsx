@@ -802,26 +802,62 @@ export function Dashboard() {
   return (
     <main className="min-h-screen bg-[#f6f8fc] px-4 py-4 text-[#172452] sm:px-6">
       <section className="mx-auto min-h-[calc(100vh-2rem)] w-full max-w-[1840px] rounded-2xl border border-[#dfe6f4] bg-white/80 px-5 py-7 shadow-[0_18px_50px_rgba(35,48,85,0.08)] sm:px-8 lg:px-12">
-        <header className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-normal text-[#111b45] lg:text-[34px]">
-              Transactions Dashboard
-            </h1>
-            <p className="mt-2 text-base font-medium text-[#617096]">
-              Import Excel rows or fetch them from the API and prepare them for journal processing
-            </p>
-          </div>
+        <header className="mb-8 border-b border-[#edf1f8] pb-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-3xl font-extrabold tracking-normal text-[#111b45] lg:text-[34px]">
+                Transactions Dashboard
+              </h1>
+              <p className="mt-2 text-base font-medium text-[#617096]">
+                Import Excel rows or fetch them from the API and prepare them for journal processing
+              </p>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex h-14 min-w-[212px] items-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 shadow-[0_8px_22px_rgba(52,68,110,0.04)]">
-              <RotateCw className="h-5 w-5 text-[#5748f5]" aria-hidden="true" />
-              <span>
-                <span className="block text-xs font-semibold text-[#617096]">Last updated</span>
-                <strong className="block text-sm font-bold text-[#2d3866]">
-                  {lastUpdated ? lastUpdated.toLocaleTimeString() : 'Loading data'}
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="mr-1 inline-flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-[#617096]">
+                <RotateCw className="h-4 w-4 text-[#5748f5]" aria-hidden="true" />
+                Last updated
+                <strong className="font-bold text-[#2d3866]">
+                  {lastUpdated ? lastUpdated.toLocaleTimeString() : 'Loading…'}
                 </strong>
               </span>
+              <button
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white text-[#172452] transition hover:bg-[#f7f8ff] disabled:opacity-60 text-[#5748f5]"
+                type="button"
+                onClick={() => {
+                  void loadTransactions()
+                  void loadTransactionGroups()
+                  void loadTransactionStatusCounts()
+                  void loadJournalCount()
+                }}
+                disabled={isLoading}
+                aria-label="Refresh transactions"
+                title="Refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              </button>
+              {user?.role === 'ADMIN' ? (
+                <Link
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dfe6f4] bg-white px-3 text-sm font-bold text-[#172452] transition hover:bg-[#f7f8ff]"
+                  to="/admin"
+                >
+                  <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                  Admin
+                </Link>
+              ) : null}
+              <button
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#dfe6f4] bg-white text-[#172452] transition hover:bg-[#f7f8ff] disabled:opacity-60"
+                type="button"
+                onClick={handleLogout}
+                aria-label="Logout"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             <input
               ref={excelInputRef}
               className="hidden"
@@ -838,88 +874,57 @@ export function Dashboard() {
             />
             <div className="relative">
               <button
-                className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#7254ff] to-[#5237e9] px-5 text-sm font-extrabold text-white shadow-[0_10px_20px_rgba(88,58,235,0.22)] transition hover:-translate-y-0.5 disabled:opacity-60"
                 type="button"
                 onClick={() => setIsImportMenuOpen((current) => !current)}
                 disabled={isActionLoading}
               >
-                <Upload className="h-5 w-5" aria-hidden="true" />
+                <Upload className="h-4 w-4" aria-hidden="true" />
                 Import File
               </button>
-              {isImportMenuOpen ? (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-48 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white shadow-[0_18px_40px_rgba(31,48,96,0.14)]">
-                  <button
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
-                    type="button"
-                    onClick={() => {
-                      setIsImportMenuOpen(false)
-                      excelInputRef.current?.click()
-                    }}
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
-                    Excel file
-                  </button>
-                  <button
-                    className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
-                    type="button"
-                    onClick={() => {
-                      setIsImportMenuOpen(false)
-                      csvInputRef.current?.click()
-                    }}
-                  >
-                    <Upload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
-                    CSV file
-                  </button>
-                </div>
-              ) : null}
+                {isImportMenuOpen ? (
+                  <div className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-48 overflow-hidden rounded-xl border border-[#dfe6f4] bg-white shadow-[0_18px_40px_rgba(31,48,96,0.14)]">
+                    <button
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                      type="button"
+                      onClick={() => {
+                        setIsImportMenuOpen(false)
+                        excelInputRef.current?.click()
+                      }}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                      Excel file
+                    </button>
+                    <button
+                      className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                      type="button"
+                      onClick={() => {
+                        setIsImportMenuOpen(false)
+                        csvInputRef.current?.click()
+                      }}
+                    >
+                      <Upload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                      CSV file
+                    </button>
+                  </div>
+                ) : null}
             </div>
             <button
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#dfe6f4] bg-white px-5 text-sm font-bold shadow-[0_6px_16px_rgba(52,68,110,0.05)] transition hover:-translate-y-0.5 disabled:opacity-60 text-[#493ee8]"
               type="button"
               onClick={() => setIsApiFetchOpen(true)}
               disabled={isActionLoading}
             >
-              <CloudDownload className="h-5 w-5" aria-hidden="true" />
+              <CloudDownload className="h-4 w-4" aria-hidden="true" />
               Fetch from API
             </button>
             <button
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#b45309] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#dfe6f4] bg-white px-5 text-sm font-bold shadow-[0_6px_16px_rgba(52,68,110,0.05)] transition hover:-translate-y-0.5 disabled:opacity-60 text-[#b45309]"
               type="button"
               onClick={() => void handleOpenNotMappedAccounts()}
             >
-              <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
               Not Mapped Accounts
-            </button>
-            <button
-              className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#5748f5] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
-              type="button"
-              onClick={() => {
-                void loadTransactions()
-                void loadTransactionGroups()
-                void loadTransactionStatusCounts()
-                void loadJournalCount()
-              }}
-              disabled={isLoading}
-              aria-label="Refresh transactions"
-            >
-              <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
-            </button>
-            {user?.role === 'ADMIN' ? (
-              <Link
-                className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
-                to="/admin"
-              >
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-                Admin
-              </Link>
-            ) : null}
-            <button
-              className="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-[#dfe6f4] bg-white/80 text-[#172452] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
-              type="button"
-              onClick={handleLogout}
-              aria-label="Logout"
-            >
-              <LogOut className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
         </header>
