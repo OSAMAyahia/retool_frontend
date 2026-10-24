@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  CloudDownload,
   Download,
   FileSpreadsheet,
   ListChecks,
@@ -16,6 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { ApiFetchModal } from '../components/ApiFetchModal'
 import { ExcelImportModal } from '../components/ExcelImportModal'
 import { EditTransactionAmountModal } from '../components/EditTransactionAmountModal'
 import { FilterBar } from '../components/FilterBar'
@@ -38,6 +40,7 @@ import {
   processJournals,
   retryTransaction,
   updateTransactionAmount,
+  type JournalApiRunSummary,
   type TransactionGroupSummary,
 } from '../services/api'
 import { getMockTransactions } from '../services/mockData'
@@ -100,7 +103,7 @@ const dashboardStatuses: TransactionStatus[] = [
   },
 ]
 
-const fallbackSources = ['Excel', 'Retool', 'Bank API', 'Partner Portal']
+const fallbackSources = ['Excel', 'API', 'Retool', 'Bank API', 'Partner Portal']
 const LARGE_FILE_THRESHOLD_BYTES = 8 * 1024 * 1024
 
 function getApiErrorMessage(error: unknown) {
@@ -207,6 +210,7 @@ export function Dashboard() {
   const [importRows, setImportRows] = useState<IngestTransactionPayload[]>([])
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false)
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false)
+  const [isApiFetchOpen, setIsApiFetchOpen] = useState(false)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [statusCounts, setStatusCounts] = useState({ completed: 0, unCompleted: 0 })
   const [reasonCounts, setReasonCounts] = useState({ notMapped: 0, notBalanced: 0, differenceAccountMissing: 0 })
@@ -734,6 +738,20 @@ export function Dashboard() {
     }
   }
 
+  const handleApiFetchCompleted = useCallback(
+    (run: JournalApiRunSummary) => {
+      setActionError(null)
+      setActionMessage(`API fetch completed. ${run.message ?? ''}`.trim())
+      setFilters({})
+      setPage(0)
+      void loadTransactions(false, {}, 0)
+      void loadTransactionGroups(false, {}, 0)
+      void loadTransactionStatusCounts()
+      void loadJournalCount()
+    },
+    [loadTransactions, loadTransactionGroups, loadTransactionStatusCounts, loadJournalCount],
+  )
+
   const handleProcessJournals = async () => {
     setIsActionLoading(true)
     setActionMessage(null)
@@ -790,7 +808,7 @@ export function Dashboard() {
               Transactions Dashboard
             </h1>
             <p className="mt-2 text-base font-medium text-[#617096]">
-              Import Excel rows and prepare them for journal processing
+              Import Excel rows or fetch them from the API and prepare them for journal processing
             </p>
           </div>
 
@@ -851,6 +869,17 @@ export function Dashboard() {
                   >
                     <Upload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
                     CSV file
+                  </button>
+                  <button
+                    className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
+                    type="button"
+                    onClick={() => {
+                      setIsImportMenuOpen(false)
+                      setIsApiFetchOpen(true)
+                    }}
+                  >
+                    <CloudDownload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
+                    From API
                   </button>
                 </div>
               ) : null}
@@ -1175,6 +1204,12 @@ export function Dashboard() {
             : undefined
         }
       />
+      {isApiFetchOpen ? (
+        <ApiFetchModal
+          onClose={() => setIsApiFetchOpen(false)}
+          onCompleted={handleApiFetchCompleted}
+        />
+      ) : null}
       {isNotMappedAccountsOpen ? (
         <NotMappedAccountsModal
           accounts={notMappedAccounts}

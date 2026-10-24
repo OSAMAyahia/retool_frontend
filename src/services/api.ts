@@ -901,6 +901,87 @@ export async function updateAdminConfig(payload: AdminConfig): Promise<AdminConf
   return response.data
 }
 
+// ---- Journal Entries API (compass-query) fetch - see JournalApiSyncService on the backend ----
+
+export interface JournalApiRunSummary {
+  trigger: 'AUTO' | 'MANUAL'
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED'
+  startedAt: string
+  finishedAt: string | null
+  startDate: string | null
+  endDate: string | null
+  pagesFetched: number
+  totalPages: number
+  fetched: number
+  imported: number
+  duplicates: number
+  failed: number
+  message: string | null
+  triggeredBy: string | null
+}
+
+export interface JournalApiStatus {
+  running: boolean
+  autoSyncEnabled: boolean
+  intervalMinutes: number
+  // Highest created_at imported by an automatic run - the next one continues from here.
+  lastSyncedAt: string | null
+  lastAutoRunAt: string | null
+  nextAutoRunAt: string | null
+  currentRun: JournalApiRunSummary | null
+  lastAutoRun: JournalApiRunSummary | null
+  lastManualRun: JournalApiRunSummary | null
+}
+
+export interface JournalApiFetchPayload {
+  accountNumber?: string
+  txnId?: string
+  // YYYY-MM-DD
+  startDate?: string
+  endDate?: string
+  // Omitted = every page matching the filters.
+  maxRecords?: number
+}
+
+export interface JournalApiConfigPayload {
+  autoSyncEnabled: boolean
+  intervalMinutes: number
+  // ISO instant; omitted = keep the stored watermark.
+  syncFrom?: string
+}
+
+// Prefers the backend's ApiErrorResponse.message over axios' generic "Request failed with status
+// code 409".
+export function apiErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const message = (error.response?.data as { message?: unknown } | undefined)?.message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return error instanceof Error ? error.message : 'Request failed'
+}
+
+export async function getJournalApiStatus(): Promise<JournalApiStatus> {
+  const response = await api.get<JournalApiStatus>('/journal-api/status')
+  return response.data
+}
+
+export async function startJournalApiFetch(payload: JournalApiFetchPayload): Promise<JournalApiStatus> {
+  const response = await api.post<JournalApiStatus>('/journal-api/fetch', payload)
+  return response.data
+}
+
+export async function updateJournalApiConfig(payload: JournalApiConfigPayload): Promise<JournalApiStatus> {
+  const response = await api.put<JournalApiStatus>('/journal-api/config', payload)
+  return response.data
+}
+
+export async function runJournalApiAutoNow(): Promise<JournalApiStatus> {
+  const response = await api.post<JournalApiStatus>('/journal-api/auto/run-now')
+  return response.data
+}
+
 export async function createTransactionStatus(
   payload: CreateStatusPayload,
 ): Promise<TransactionStatus> {

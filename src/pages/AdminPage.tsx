@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { JournalApiSyncPanel } from '../components/JournalApiSyncPanel'
 import {
   createAdminUser,
   createTransactionStatus,
@@ -586,6 +587,8 @@ export function AdminPage() {
             </form>
           </section>
         </div>
+
+        <JournalApiSyncPanel />
 
         <section className="mt-6 rounded-xl border border-[#dfe6f4] bg-white">
           <div className="flex items-center gap-3 border-b border-[#dfe6f4] px-5 py-4">
