@@ -870,20 +870,18 @@ export function Dashboard() {
                     <Upload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
                     CSV file
                   </button>
-                  <button
-                    className="flex w-full items-center gap-3 border-t border-[#edf1f8] px-4 py-3 text-left text-sm font-bold text-[#172452] transition hover:bg-[#f8fbff]"
-                    type="button"
-                    onClick={() => {
-                      setIsImportMenuOpen(false)
-                      setIsApiFetchOpen(true)
-                    }}
-                  >
-                    <CloudDownload className="h-4 w-4 text-[#493ee8]" aria-hidden="true" />
-                    From API
-                  </button>
                 </div>
               ) : null}
             </div>
+            <button
+              className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-6 text-sm font-bold text-[#493ee8] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5 disabled:opacity-60"
+              type="button"
+              onClick={() => setIsApiFetchOpen(true)}
+              disabled={isActionLoading}
+            >
+              <CloudDownload className="h-5 w-5" aria-hidden="true" />
+              Fetch from API
+            </button>
             <button
               className="inline-flex h-14 items-center justify-center gap-3 rounded-xl border border-[#dfe6f4] bg-white/80 px-5 text-sm font-bold text-[#b45309] shadow-[0_8px_22px_rgba(52,68,110,0.04)] transition hover:-translate-y-0.5"
               type="button"
